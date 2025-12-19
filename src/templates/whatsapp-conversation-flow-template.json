@@ -1,0 +1,749 @@
+{
+    "global_prompt": "You are {{agent_name}}, an assistant at {{business_name}} clinic. You communicate via WhatsApp text messages in a WARM, FRIENDLY, and PROFESSIONAL manner.\n\n## Objective:\nHelp patients schedule consultations, answer questions, and provide excellent service through text conversation.\n\n## WhatsApp-Specific Style:\n- Be concise: Keep messages short and readable on mobile devices (2-3 sentences max)\n- Use emojis naturally but not excessively (😊, 👍, 📅, 🏥, 👉)\n- Break long messages into multiple shorter ones for better readability\n- Be conversational and warm\n- Respond quickly and directly to user questions\n- Always acknowledge what the user says before moving to next topic\n\n## Critical Rules:\n- NAME CONSISTENCY: ALWAYS use the exact same client name ({{name}}) throughout. Never mix up names or genders\n- One question at a time: Don't overwhelm with multiple questions in one message\n- Natural flow: Match the user's communication style and pace\n- Direct answers: Answer questions directly without unnecessary repetition\n- Context awareness: Remember what was already discussed in the conversation\n- Track conversation: Don't repeat questions or information already covered\n\n## Date/Time Formatting:\n- Use natural language: \"15 de novembro às 12:30\" not \"15/11/2025\"\n- Day of week helps: \"segunda-feira, 15 de novembro às 12:30\"\n- Be clear about morning/afternoon: \"manhã\" or \"tarde\"\n\n## Response Guidelines:\n- Keep messages under 2-3 sentences when possible\n- Use line breaks to separate different thoughts\n- Confirm understanding by restating key information\n- Always end with a clear next step or question\n\n## Business Context:\n- Clinic: {{business_name}}\n- Specialty: {{business_specialty}}\n- Social Proof: {{social_proof}}\n- Doctor: {{doctor_name}} ({{doctor_specialty}})\n- Location: {{doctor_city}}\n- Telemedicine: {{telemedicine}}\n- Consultation price: {{consultation_price}}\n- Duration: {{consultation_duration}}\n- Available slots: {{available_slots}}",
+    "nodes": [
+        {
+            "name": "Route_By_Chat_Type",
+            "edges": [
+                {
+                    "destination_node_id": "node-welcome-flow",
+                    "id": "edge-route-to-welcome",
+                    "transition_condition": {
+                        "type": "equation",
+                        "equations": [
+                            {
+                                "left": "{{chat_type}}",
+                                "operator": "==",
+                                "right": "welcome"
+                            }
+                        ],
+                        "operator": "||"
+                    }
+                },
+                {
+                    "destination_node_id": "node-real-available-time",
+                    "id": "edge-route-to-real-time",
+                    "transition_condition": {
+                        "type": "equation",
+                        "equations": [
+                            {
+                                "left": "{{chat_type}}",
+                                "operator": "==",
+                                "right": "real_available_time"
+                            }
+                        ],
+                        "operator": "||"
+                    }
+                },
+                {
+                    "destination_node_id": "node-confirm-appointment",
+                    "id": "edge-route-to-confirm",
+                    "transition_condition": {
+                        "type": "equation",
+                        "equations": [
+                            {
+                                "left": "{{chat_type}}",
+                                "operator": "==",
+                                "right": "confirm_appointment"
+                            }
+                        ],
+                        "operator": "||"
+                    }
+                }
+            ],
+            "id": "node-route-by-chat-type",
+            "else_edge": {
+                "destination_node_id": "node-other-greeting",
+                "id": "edge-route-to-other",
+                "transition_condition": {
+                    "type": "prompt",
+                    "prompt": "Else"
+                }
+            },
+            "type": "branch",
+            "display_position": {
+                "x": 100,
+                "y": 0
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "CHAT TYPE: 'welcome' - User didn't answer the call, so we're reaching out via WhatsApp.\n\nStart with a warm greeting and explain why we're contacting:\n\n\"Olá {{name}}! 👋\nAqui é a {{agent_name}} da clínica {{business_name}}.\n\nTentamos entrar em contato por telefone para confirmar sua consulta, mas não conseguimos. 😊\n\nPrefere continuar por aqui?\"\n\nWait for response. If user agrees to continue, proceed to explain the service."
+            },
+            "name": "Welcome_Flow",
+            "edges": [
+                {
+                    "destination_node_id": "node-explain-service",
+                    "id": "edge-welcome-to-explain",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User agrees to continue (sim, pode, ok, claro, prefiro aqui)"
+                    }
+                },
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-welcome-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks questions"
+                    }
+                }
+            ],
+            "id": "node-welcome-flow",
+            "type": "conversation",
+            "display_position": {
+                "x": 600,
+                "y": -300
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Explain the appointment details and service:\n\n\"Perfeito, {{name}}! 🎉\n\nSua consulta com o(a) Dr. {{doctor_name}} está confirmada para {{suggested_date}}.\n\n📍 Endereço / link: {{doctor_address}}\n💰 Valor: {{consultation_price}}\n⏱️ Duração: {{consultation_duration}}\n\nSe precisar remarcar, é só responder aqui. 😊\"\n\nThen ask: \"Alguma dúvida sobre a consulta?\"\n\nWait for response."
+            },
+            "name": "Explain_Service",
+            "edges": [
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-explain-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks questions"
+                    }
+                },
+                {
+                    "destination_node_id": "node-offer-alternatives",
+                    "id": "edge-explain-to-alternatives",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants different time/date"
+                    }
+                },
+                {
+                    "destination_node_id": "node-final-confirmation",
+                    "id": "edge-explain-to-final-confirm",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User confirms or has no questions"
+                    }
+                }
+            ],
+            "id": "node-explain-service",
+            "type": "conversation",
+            "display_position": {
+                "x": 1100,
+                "y": -300
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "CHAT TYPE: 'real_available_time' - Show actual available times to the user.\n\nRespond with:\n\"Olá {{name}}! 😊\nAqui é a {{agent_name}} da clínica {{business_name}}.\n\nConseguimos horários antes do dia {{suggested_date}} que você mencionou:\n\n{{available_slots}}\n\nAlgum desses funciona para você?\"\n\nWait for response."
+            },
+            "name": "Real_Available_Time",
+            "edges": [
+                {
+                    "destination_node_id": "node-final-confirmation",
+                    "id": "edge-real-time-to-confirm",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User selects one of the times"
+                    }
+                },
+                {
+                    "destination_node_id": "node-extract-requested-date",
+                    "id": "edge-real-time-to-extract",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks about a different specific date"
+                    }
+                },
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-real-time-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks questions"
+                    }
+                }
+            ],
+            "id": "node-real-available-time",
+            "type": "conversation",
+            "display_position": {
+                "x": 600,
+                "y": -100
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "CHAT TYPE: 'confirm_appointment' - Confirm an existing appointment.\n\nAnalyze user's response:\n\n1. If user confirms (\"sim\", \"pode ser\", \"ok\", \"confirmo\", \"está bom\"):\n   → Move to final confirmation\n\n2. If user wants to reschedule:\n   → Move to offer alternatives\n\n3. If user asks questions:\n   → Answer questions first\n\n4. If user just greets or shows interest:\n   → Briefly recap the appointment and ask if they want to confirm:\n   \n   \"Sua consulta com o(a) Dr. {{doctor_name}} está confirmada para {{suggested_date}}.\n   \n   Posso confirmar esse horário para você? 😊\"\n\nWait for response."
+            },
+            "name": "Confirm_Appointment",
+            "edges": [
+                {
+                    "destination_node_id": "node-final-confirmation",
+                    "id": "edge-confirm-to-final",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User explicitly confirms"
+                    }
+                },
+                {
+                    "destination_node_id": "node-offer-alternatives",
+                    "id": "edge-confirm-to-alternatives",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants different time"
+                    }
+                },
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-confirm-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks questions"
+                    }
+                }
+            ],
+            "id": "node-confirm-appointment",
+            "type": "conversation",
+            "display_position": {
+                "x": 600,
+                "y": 100
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "CHAT TYPE: 'other' - User contacted us directly through WhatsApp.\n\nStart with a warm greeting:\n\n\"Olá! 👋\nSou {{agent_name}}, assistente da clínica {{business_name}}.\n\nComo posso te ajudar hoje? 😊\"\n\nWait for user to explain what they need."
+            },
+            "name": "Other_Greeting",
+            "edges": [
+                {
+                    "destination_node_id": "node-other-discovery",
+                    "id": "edge-other-greeting-to-discovery",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User explains their need or asks about services"
+                    }
+                }
+            ],
+            "id": "node-other-greeting",
+            "type": "conversation",
+            "display_position": {
+                "x": 600,
+                "y": 300
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "For 'other' type - Gather information about what the user needs.\n\nAsk ONE question at a time based on what information we're missing:\n\n1. If we don't know their need/symptom:\n   \"Me conta um pouquinho: o que está acontecendo? O que te traz aqui? 😊\"\n\n2. If we know their need but not the specialty:\n   \"Entendi! E você já tem alguma especialidade em mente, ou quer que eu te ajude a encontrar o médico ideal?\"\n\n3. If we need to understand urgency:\n   \"Há quanto tempo você está sentindo isso?\"\n\n4. After gathering info, confirm:\n   \"Perfeito! Deixa eu verificar o melhor médico para o seu caso... 👨‍⚕️\"\n\nThen transition to recommend doctor.\n\nDon't ask all questions at once - be conversational and natural."
+            },
+            "name": "Other_Discovery",
+            "edges": [
+                {
+                    "destination_node_id": "node-other-recommend-doctor",
+                    "id": "edge-discovery-to-recommend",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "We have enough information to recommend a doctor"
+                    }
+                }
+            ],
+            "id": "node-other-discovery",
+            "type": "conversation",
+            "display_position": {
+                "x": 1100,
+                "y": 300
+            }
+        },
+        {
+            "tool_id": "tool-1757332007477",
+            "instruction": {
+                "type": "static_text",
+                "text": "Verificando o melhor médico para você... 🔍"
+            },
+            "name": "Other_Recommend_Doctor",
+            "edges": [
+                {
+                    "destination_node_id": "node-other-present-doctor",
+                    "id": "edge-recommend-to-present",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After getting doctor recommendation"
+                    }
+                }
+            ],
+            "id": "node-other-recommend-doctor",
+            "type": "function",
+            "tool_type": "local",
+            "speak_during_execution": false,
+            "display_position": {
+                "x": 1600,
+                "y": 300
+            },
+            "wait_for_result": true
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Present the recommended doctor to the user:\n\n\"Perfeito! 😊\n\nEncontrei o(a) Dr(a). {{doctor_name}} para você.\n\n👨‍⚕️ Especialidade: {{doctor_specialty}}\n📍 Local: {{doctor_city}}\n💰 Consulta: {{consultation_price}}\n⏱️ Duração: {{consultation_duration}}\n\n{{doctor_bio}}\n\nO que você acha? Gostaria de agendar uma consulta?\"\n\nWait for response."
+            },
+            "name": "Other_Present_Doctor",
+            "edges": [
+                {
+                    "destination_node_id": "node-offer-alternatives",
+                    "id": "edge-present-to-alternatives",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User agrees and wants to see available times"
+                    }
+                },
+                {
+                    "destination_node_id": "node-other-recommend-doctor",
+                    "id": "edge-present-to-another",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants to see another doctor option"
+                    }
+                },
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-present-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks questions about the doctor or service"
+                    }
+                },
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-present-to-goodbye",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User declines"
+                    }
+                }
+            ],
+            "id": "node-other-present-doctor",
+            "type": "conversation",
+            "display_position": {
+                "x": 2100,
+                "y": 300
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "User wants to see alternative dates/times or we're showing available slots.\n\nFirst, acknowledge their request:\n\"Ótimo! 😊\nDeixa eu ver os horários disponíveis...\"\n\nThen present available slots:\n\"Temos as seguintes opções:\n\n{{available_slots}}\n\nQual funciona melhor para você?\"\n\nIf user asks for a SPECIFIC date that's not in the list, transition to extract date and check availability.\n\nWait for response."
+            },
+            "name": "Offer_Alternatives",
+            "edges": [
+                {
+                    "destination_node_id": "node-final-confirmation",
+                    "id": "edge-alternatives-to-final",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User selects one of the offered times"
+                    }
+                },
+                {
+                    "destination_node_id": "node-extract-requested-date",
+                    "id": "edge-alternatives-to-extract",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks for a specific date not in the list"
+                    }
+                },
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-alternatives-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks questions"
+                    }
+                },
+                {
+                    "destination_node_id": "node-offer-callback",
+                    "id": "edge-alternatives-to-callback",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants earlier date but none available in the list"
+                    }
+                }
+            ],
+            "id": "node-offer-alternatives",
+            "type": "conversation",
+            "display_position": {
+                "x": 1600,
+                "y": 0
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Answer the user's question directly and helpfully.\n\nCommon questions:\n\n**1. Location/Address:**\n\"A consulta é em {{doctor_city}}. 📍\nEndereço: {{doctor_address}}\"\n\n**2. Telemedicine:**\nIf {{telemedicine}} includes 'online' or 'telemedicina':\n\"Sim! O(a) Dr. {{doctor_name}} atende presencial e online. 💻\nVocê pode escolher o que preferir.\"\n\nIf not:\n\"A consulta é presencial em {{doctor_city}}. 🏥\"\n\n**3. Price:**\n\"O valor da consulta é {{consultation_price}}. 💰\n{{payment_methods}}\"\n\n**4. Duration:**\n\"A consulta dura aproximadamente {{consultation_duration}}. ⏱️\nÉ bem completa e personalizada!\"\n\n**5. How it works:**\n\"É simples! 😊\nVocê agenda, comparece no horário (ou acessa o link se for online), e o(a) Dr. {{doctor_name}} vai te atender.\"\n\n**6. About the doctor:**\n\"{{doctor_name}} é {{doctor_specialty}}. 👨‍⚕️\n{{doctor_bio}}\"\n\n**7. Payment methods:**\n\"{{payment_methods}}\"\n\n**8. Cancellation/Return policy:**\n\"{{return_policy}}\"\n\n**9. Other services:**\nIf they ask about other services:\n\"Também oferecemos: {{other_services}} 🏥\nQuer saber mais sobre algum deles?\"\n\n**10. Want another doctor:**\nIf user asks for another doctor option:\n\"Claro! Deixa eu verificar outras opções... 🔍\"\n→ Transition to recommend another doctor\n\nAfter answering, ask:\n\"Tem mais alguma dúvida? 😊\"\n\nOR if in booking flow:\n\"Posso confirmar o horário para você?\"\n\nWait for response."
+            },
+            "name": "Answer_Questions",
+            "edges": [
+                {
+                    "destination_node_id": "node-final-confirmation",
+                    "id": "edge-qa-to-final",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User is ready to confirm appointment"
+                    }
+                },
+                {
+                    "destination_node_id": "node-offer-alternatives",
+                    "id": "edge-qa-to-alternatives",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants to see available times"
+                    }
+                },
+                {
+                    "destination_node_id": "node-other-recommend-doctor",
+                    "id": "edge-qa-to-recommend",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks for another doctor option"
+                    }
+                },
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-qa-to-goodbye",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants to end conversation or says no more questions and doesn't want to book"
+                    }
+                }
+            ],
+            "id": "node-answer-questions",
+            "type": "conversation",
+            "display_position": {
+                "x": 2100,
+                "y": 0
+            }
+        },
+        {
+            "name": "Extract_Requested_Date",
+            "edges": [
+                {
+                    "destination_node_id": "node-check-availability",
+                    "id": "edge-extract-to-check",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After extracting date"
+                    }
+                }
+            ],
+            "variables": [
+                {
+                    "name": "date",
+                    "description": "The specific date the user is asking about in ISO format (YYYY-MM-DD). If user mentions only day and month without year, use current year {{current_year}}. If user asks for 'another date' without specifying, use the next day after {{suggested_date}}.",
+                    "type": "string",
+                    "choices": []
+                }
+            ],
+            "id": "node-extract-requested-date",
+            "type": "extract_dynamic_variables",
+            "display_position": {
+                "x": 2100,
+                "y": -300
+            }
+        },
+        {
+            "tool_id": "tool-1761643337360",
+            "instruction": {
+                "type": "static_text",
+                "text": "Verificando disponibilidade... ⏳"
+            },
+            "name": "Check_Availability",
+            "edges": [
+                {
+                    "destination_node_id": "node-present-availability-results",
+                    "id": "edge-check-to-present",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After checking availability"
+                    }
+                }
+            ],
+            "id": "node-check-availability",
+            "type": "function",
+            "tool_type": "local",
+            "speak_during_execution": false,
+            "display_position": {
+                "x": 2600,
+                "y": -300
+            },
+            "wait_for_result": true
+        },
+        {
+            "name": "Present_Availability_Results",
+            "edges": [
+                {
+                    "destination_node_id": "node-final-confirmation",
+                    "id": "edge-present-to-final",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User selects a time slot"
+                    }
+                },
+                {
+                    "destination_node_id": "node-extract-requested-date",
+                    "id": "edge-present-to-extract",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks about another date"
+                    }
+                },
+                {
+                    "destination_node_id": "node-offer-callback",
+                    "id": "edge-present-to-callback",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants earlier date but none available"
+                    }
+                },
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-present-avail-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks questions"
+                    }
+                }
+            ],
+            "id": "node-present-availability-results",
+            "type": "conversation",
+            "display_position": {
+                "x": 3100,
+                "y": -300
+            },
+            "instruction": {
+                "type": "prompt",
+                "text": "Present the availability results from the check-availability function.\n\nIf {{available}} is true and we have {{availableSlots}}:\n\"Ótimo! 😊\nTemos horários disponíveis:\n\n[Format each slot clearly]\n👉 [Date and time]\n👉 [Date and time]\n\nQual funciona melhor para você?\"\n\nExample format:\n👉 Segunda, 13 de novembro às 10:00\n👉 Terça, 14 de novembro às 08:30\n\nIf {{available}} is false:\n\"Hmm, essa data específica já está preenchida. 😕\n\nMas temos disponibilidade em:\n{{available_slots}}\n\nAlgum desses funciona?\"\n\nAlways present in a mobile-friendly format with clear formatting and emojis.\n\nWait for response."
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "When no suitable alternatives are available or user wants much earlier date.\n\nRespond with:\n\"Entendo, {{name}}! 😊\n\nA agenda do(a) Dr. {{doctor_name}} está bem cheia, mas vou tentar conseguir um encaixe antes para você.\n\nVou verificar e te retorno ainda hoje ou amanhã. Pode ser?\"\n\nWait for response."
+            },
+            "name": "Offer_Callback",
+            "edges": [
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-callback-to-goodbye",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User agrees to wait for callback or declines"
+                    }
+                }
+            ],
+            "id": "node-offer-callback",
+            "type": "conversation",
+            "display_position": {
+                "x": 2600,
+                "y": 200
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Final confirmation of the appointment.\n\nSend confirmation message:\n\"Perfeito, {{name}}! 🎉\n\nSua consulta está confirmada:\n\n👨‍⚕️ Dr(a). {{doctor_name}}\n📅 {{suggested_date}}\n📍 {{doctor_address}}\n💰 {{consultation_price}}\n\nVou enviar os detalhes completos agora. Se precisar remarcar, é só chamar! 😊\"\n\nThen ask: \"Tem mais alguma dúvida?\"\n\nWait for response."
+            },
+            "name": "Final_Confirmation",
+            "edges": [
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-final-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User has questions"
+                    }
+                },
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-final-to-goodbye",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User has no questions or says goodbye"
+                    }
+                }
+            ],
+            "id": "node-final-confirmation",
+            "type": "conversation",
+            "display_position": {
+                "x": 2600,
+                "y": 0
+            }
+        },
+        {
+            "name": "Goodbye",
+            "instruction": {
+                "type": "prompt",
+                "text": "End the conversation warmly based on context.\n\n**If appointment was confirmed:**\n\"Perfeito! Qualquer coisa, é só chamar aqui. 😊\nAté logo e tenha um ótimo dia!\"\n\n**If waiting for callback:**\n\"Perfeito! Vou verificar e te retorno em breve. 😊\nAté logo!\"\n\n**If user declined or no appointment made:**\n\"Sem problemas! Estamos aqui sempre que precisar. 😊\nTenha um ótimo dia!\"\n\nAlways be warm and leave the door open for future contact."
+            },
+            "id": "node-goodbye",
+            "type": "end",
+            "display_position": {
+                "x": 3100,
+                "y": 0
+            },
+            "speak_during_execution": false
+        }
+    ],
+    "start_node_id": "node-route-by-chat-type",
+    "start_speaker": "user",
+    "tools": [
+        {
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "date": "{{date}}",
+                "lead_id": "{{lead_id}}"
+            },
+            "description": "Check availability for a specific date",
+            "type": "custom",
+            "url": "https://app.aluri.ai/retell/check-availability",
+            "tool_id": "tool-1761643337360",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "check-availability",
+            "response_variables": {
+                "available": "available",
+                "timezone": "timezone",
+                "availableSlots": "availableSlots"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "args": {
+                        "type": "object",
+                        "description": "",
+                        "properties": {
+                            "date": {
+                                "type": "string",
+                                "description": "{{date}}"
+                            },
+                            "lead_id": {
+                                "type": "string",
+                                "description": "{{lead_id}}"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "specialty": "{{specialty}}",
+                "agent_id": "{{agent_id}}",
+                "city": "{{city}}",
+                "need": "{{need}}",
+                "owner_id": "{{owner_id}}",
+                "exclude_doctor_id": "{{doctor_id}}",
+                "lead_id": "{{lead_id}}"
+            },
+            "description": "Recommend a doctor based on user needs",
+            "type": "custom",
+            "url": "https://app.aluri.ai/retell/recommend_doctor",
+            "tool_id": "tool-1757332007477",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "Maybe_recommend_doctor",
+            "response_variables": {
+                "doctor_specialty": "agent_variables.doctor_specialty",
+                "doctor_tags": "agent_variables.doctor.tags",
+                "available_slots": "agent_variables.available_slots",
+                "cancellation_policy_days": "agent_variables.cancellation_policy_days",
+                "doctor_bio": "agent_variables.doctor_bio",
+                "another_doctor_available": "another_doctor_available",
+                "doctor_address": "agent_variables.doctor_address",
+                "consultation_price": "agent_variables.consultation_price",
+                "suggested_date": "agent_variables.suggested_date",
+                "telemedicine_available": "agent_variables.telemedicine_available",
+                "other_services": "agent_variables.other_services",
+                "return_policy_days": "agent_variables.return_policy_days",
+                "doctor_id": "agent_variables.doctor.id",
+                "payment_methods": "agent_variables.payment_methods",
+                "script_availability": "agent_variables.script_availability",
+                "return_policy": "agent_variables.return_policy",
+                "doctor_city": "agent_variables.doctor_city",
+                "consultation_duration": "agent_variables.consultation_duration",
+                "return_consultation_price": "agent_variables.return_consultation_price",
+                "doctor_name": "agent_variables.doctor_name"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "args": {
+                        "type": "object",
+                        "description": "",
+                        "properties": {
+                            "specialty": {
+                                "type": "string",
+                                "description": "{{specialty}}"
+                            },
+                            "agent_id": {
+                                "type": "string",
+                                "description": "{{agent_id}}"
+                            },
+                            "need": {
+                                "type": "string",
+                                "description": "{{need}}"
+                            },
+                            "city": {
+                                "type": "string",
+                                "description": "{{city}}"
+                            },
+                            "owner_id": {
+                                "type": "string",
+                                "description": "{{owner_id}}"
+                            },
+                            "exclude_doctor_id": {
+                                "type": "string",
+                                "description": "{{doctor_id}}"
+                            },
+                            "lead_id": {
+                                "type": "string",
+                                "description": "{{lead_id}}"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ],
+    "model_choice": {
+        "type": "cascading",
+        "model": "gpt-4.1",
+        "high_priority": false
+    },
+    "model_temperature": 0.3,
+    "tool_call_strict_mode": false,
+    "knowledge_base_ids": [],
+    "kb_config": {
+        "top_k": 3,
+        "filter_score": 0.6
+    },
+    "begin_tag_display_position": {
+        "x": 0,
+        "y": 0
+    },
+    "is_published": false,
+    "mcps": [],
+    "flex_mode": false
+}

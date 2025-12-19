@@ -1,0 +1,1567 @@
+{
+    "global_prompt": "You are {{agent_name}}, an assistant at {{business_name}} beauty clinic. You communicate via WhatsApp text messages in a WARM, ENERGETIC, and PROFESSIONAL manner.\n\n## CRITICAL: Template Already Sent\nIMPORTANT: A WhatsApp template message was ALREADY sent to the user before this conversation started. DO NOT repeat the template greeting. The user is REPLYING to that template.\n\n## Objective:\nHelp clients schedule beauty treatments, answer questions, and provide excellent service through text conversation.\n\n## WhatsApp-Specific Style:\n- Be ENERGETIC: Sound genuinely happy and enthusiastic\n- Be concise: Keep messages short and readable on mobile (2-3 sentences max)\n- Use emojis naturally but not excessively (😊, 💆, ✨, 📅, 💰)\n- Break long messages into multiple shorter ones\n- Be conversational and warm\n- Respond quickly and directly to user questions\n- Always acknowledge what the user says before moving to next topic\n\n## Critical Rules:\n- NAME CONSISTENCY: ALWAYS use the exact same client name ({{name}}) throughout\n- One question at a time: Don't overwhelm with multiple questions\n- Natural flow: Match the user's communication style and pace\n- Direct answers: Answer questions directly without unnecessary repetition\n- Context awareness: Remember what was already discussed\n- Track conversation: Don't repeat questions or information already covered\n- NEVER re-send the initial template message - it was already sent!\n\n## Anti-Repetition & Natural Variety:\n- Rotate acknowledgments: 'Perfeito!', 'Ótimo!', 'Entendi!', 'Certo!', 'Isso aí!' (NEVER use 'Legal')\n- Avoid overused phrases - use sparingly\n- Paraphrase instead of repeating\n- Keep responses fresh and human\n\n## Smart Response to Repeat Questions:\n- First time: Full explanation\n- Second time: Brief answer with new angle\n- NEVER repeat the same full explanation\n\n## Date/Time Formatting:\n- Use natural language: \"15 de novembro às 12:30\"\n- Day of week helps: \"segunda-feira, 15 de novembro às 12:30\"\n\n## STRONG SALES LOGIC:\n- ALWAYS push for treatment booking regardless of concern severity\n- Emphasize self-care, confidence boost, and professional expertise\n- NEVER offer to \"wait\" - always recommend booking now\n- Use social proof to create urgency\n\n## Business Context:\n- Clinic: {{business_name}}\n- Social Proof: {{social_proof}}\n- Treatment: {{treatment_name}}\n- Treatment Benefits: {{treatment_benefit}}\n- Treatment Effects: {{treatment_effects}}\n- Treatment Result: {{treatment_result}}\n- Session Duration: {{session_duration}}\n- Recommended Sessions: {{recommended_sessions}}\n- Interval: {{interval_between_sessions}}\n- Price: {{treatment_price}}\n- Single Session: {{single_session_price}}\n- Package: {{package_sessions_count}} sessions for {{package_price}}\n- Payment Methods: {{payment_methods}}\n- Available Slots: {{available_slots}}\n- Client Feedback: {{client_feedback}}\n- Other Services: {{other_services}}",
+    "nodes": [
+        {
+            "name": "Route_By_Chat_Type",
+            "edges": [
+                {
+                    "destination_node_id": "node-welcome-flow",
+                    "id": "edge-route-to-welcome",
+                    "transition_condition": {
+                        "type": "equation",
+                        "equations": [
+                            {
+                                "left": "{{chat_type}}",
+                                "operator": "==",
+                                "right": "welcome"
+                            }
+                        ],
+                        "operator": "||"
+                    }
+                },
+                {
+                    "destination_node_id": "node-real-available-time",
+                    "id": "edge-route-to-real-time",
+                    "transition_condition": {
+                        "type": "equation",
+                        "equations": [
+                            {
+                                "left": "{{chat_type}}",
+                                "operator": "==",
+                                "right": "real_available_time"
+                            }
+                        ],
+                        "operator": "||"
+                    }
+                },
+                {
+                    "destination_node_id": "node-confirm-appointment",
+                    "id": "edge-route-to-confirm",
+                    "transition_condition": {
+                        "type": "equation",
+                        "equations": [
+                            {
+                                "left": "{{chat_type}}",
+                                "operator": "==",
+                                "right": "confirm_appointment"
+                            }
+                        ],
+                        "operator": "||"
+                    }
+                },
+                {
+                    "destination_node_id": "node-followup-flow",
+                    "id": "edge-route-to-followup",
+                    "transition_condition": {
+                        "type": "equation",
+                        "equations": [
+                            {
+                                "left": "{{chat_type}}",
+                                "operator": "==",
+                                "right": "followup"
+                            }
+                        ],
+                        "operator": "||"
+                    }
+                }
+            ],
+            "id": "node-route-by-chat-type",
+            "else_edge": {
+                "destination_node_id": "node-other-greeting",
+                "id": "edge-route-to-other",
+                    "transition_condition": {
+                        "type": "prompt",
+                    "prompt": "Else"
+                }
+            },
+            "type": "branch",
+            "display_position": {
+                "x": 100,
+                "y": 0
+            }
+        },
+        {
+            "instruction": {
+                        "type": "prompt",
+                "text": "CHAT TYPE: 'welcome' - User is REPLYING to our initial_welcome template.\n\nThe template they received was:\n\"Olá {{name}}! 👋\nSou {{agent_name}}, assistente da clínica {{business_name}}.\nTentamos entrar em contato por telefone para confirmar seu agendamento, mas não conseguimos.\nPrefere continuar por aqui? 😊\"\n\n## Your Task:\nACKNOWLEDGE their response and CONTINUE. DO NOT repeat the greeting.\n\n## Based on user's response:\n\n**If user agrees (sim, pode, ok, claro, prefiro aqui, pode ser):**\n\"Ótimo, {{name}}! 😊\n\nVocê demonstrou interesse em {{treatment_name}}. Me conta, o que mais te incomoda hoje na sua pele?\"\n\nWait for their skin concerns.\n\n**After they share concerns:**\n\"Entendi! 💆\n\n{{treatment_name}} é perfeito para isso - {{treatment_benefit}}.\n\nTemos horários disponíveis:\n{{available_slots}}\n\nQual funciona para você?\"\n\n**If user asks a question:**\nAnswer their question directly, then continue.\n\n**If user just says 'oi', 'olá':**\n\"Oi, {{name}}! 😊\nPosso te ajudar com o agendamento do seu tratamento?\"\n\nWait for response."
+                },
+            "name": "Welcome_Flow",
+            "edges": [
+                {
+                    "destination_node_id": "node-discovery-concerns",
+                    "id": "edge-welcome-to-discovery",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User agrees to continue and wants to talk about their concerns"
+                    }
+                },
+                {
+                    "destination_node_id": "node-offer-alternatives",
+                    "id": "edge-welcome-to-alternatives",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User already knows what they want and is ready to see available times"
+                    }
+                },
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-welcome-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks questions about the treatment, price, etc."
+                    }
+                },
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-welcome-to-goodbye",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User declines or is not interested"
+                    }
+                }
+            ],
+            "id": "node-welcome-flow",
+            "type": "conversation",
+            "display_position": {
+                "x": 600,
+                "y": -300
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "DISCOVERY - Understanding user's skin concerns.\n\nAcknowledge with WARMTH and ENERGY:\n\"Entendi, {{name}}! 😊\"\n\nAsk ONE follow-up question (choose one):\n- \"Há quanto tempo isso te incomoda?\"\n- \"Como isso está afetando sua confiança no dia a dia?\"\n- \"Você tem algum resultado específico em mente?\"\n\nWait for response.\n\nAfter getting their answer, transition naturally:\n\"Perfeito! Baseado no que você me contou, {{treatment_name}} é ideal para você.\n\n✨ {{treatment_benefit}}\n💆 Nossos clientes sempre dizem: {{client_feedback}}\n\nQuer ver os horários disponíveis?\"\n\nWait for response."
+            },
+            "name": "Discovery_Concerns",
+            "edges": [
+                {
+                    "destination_node_id": "node-present-treatment",
+                    "id": "edge-discovery-to-treatment",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After understanding user's concerns"
+                    }
+                }
+            ],
+            "id": "node-discovery-concerns",
+            "type": "conversation",
+            "display_position": {
+                "x": 1100,
+                "y": -300
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "PRESENT TREATMENT - Show treatment details.\n\n**Step 1 - Treatment Benefits:**\n\"{{treatment_name}} proporciona {{treatment_effects}} e deixa sua pele com aquele aspecto {{treatment_result}}. ✨\"\n\n**Step 2 - How it works:**\n\"💆 Duração: {{session_duration}}\n📋 Sessões recomendadas: {{recommended_sessions}}\n⏰ Intervalo: {{interval_between_sessions}}\"\n\n**Step 3 - Price:**\n\"💰 Investimento: {{single_session_price}} por sessão\n{{payment_methods}}\"\n\n**If package available:**\n\"📦 Pacote especial: {{package_sessions_count}} sessões por {{package_price}}\"\n\n**Step 4 - Availability:**\n\"Temos esses horários disponíveis:\n{{available_slots}}\n\nQual funciona melhor para você? 😊\"\n\nWait for response.\n\n**CRITICAL - HANDLING REPEAT QUESTIONS:**\nIf user asks about PRICE again:\n- First time: Full explanation (already given)\n- Second time: \"O valor da sessão é {{single_session_price}}.\" (just price)\n\nNEVER repeat the same full explanation."
+            },
+            "name": "Present_Treatment",
+            "edges": [
+                {
+                    "destination_node_id": "node-final-confirmation",
+                    "id": "edge-treatment-to-confirm",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User agrees to one of the available slots"
+                    }
+                },
+                {
+                    "destination_node_id": "node-extract-requested-date",
+                    "id": "edge-treatment-to-extract",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks about a specific date not in the list"
+                    }
+                },
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-treatment-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks questions"
+                }
+                },
+                {
+                    "destination_node_id": "node-recommend-another-treatment",
+                    "id": "edge-treatment-to-another",
+                    "transition_condition": {
+                "type": "prompt",
+                        "prompt": "User wants a different treatment"
+                    }
+            },
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-treatment-to-decline",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User clearly declines"
+                    }
+                }
+            ],
+            "id": "node-present-treatment",
+            "type": "conversation",
+            "display_position": {
+                "x": 1600,
+                "y": -300
+            }
+            },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "CHAT TYPE: 'real_available_time' - User is REPLYING to our earlier_appointment_offer template.\n\nThe template they received showed available slots before their requested date.\n\n## Your Task:\nACKNOWLEDGE their response. DO NOT repeat the slots.\n\n## Based on user's response:\n\n**If user selects a slot (primeiro, segundo, o das 10h, etc.):**\n\"Perfeito, {{name}}! 🎉\nVou reservar o horário de [selected slot] para você.\n\nConfirmo o agendamento?\"\n\n**If user asks for different times:**\n\"Entendi! Deixa eu verificar outros horários... ⏳\"\nThen use check-availability tool.\n\n**If user asks questions:**\nAnswer directly, then return to scheduling.\n\n**If user says none work:**\n\"Sem problemas! Que dia e horário seria melhor para você? 😊\"\n\nWait for response."
+            },
+            "name": "Real_Available_Time",
+            "edges": [
+                {
+                    "destination_node_id": "node-final-confirmation",
+                    "id": "edge-real-time-to-confirm",
+                "transition_condition": {
+                    "type": "prompt",
+                        "prompt": "User selects one of the offered times"
+            }
+        },
+        {
+                    "destination_node_id": "node-extract-requested-date",
+                    "id": "edge-real-time-to-extract",
+                    "transition_condition": {
+                "type": "prompt",
+                        "prompt": "User asks about a different specific date"
+                    }
+            },
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-real-time-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks questions"
+                    }
+                },
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-real-time-to-goodbye",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User declines or wants to cancel"
+                    }
+                }
+            ],
+            "id": "node-real-available-time",
+            "type": "conversation",
+            "display_position": {
+                "x": 600,
+                "y": -100
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "CHAT TYPE: 'confirm_appointment' - User is REPLYING to our appointment_confirmation_treat template.\n\nThe appointment is ALREADY confirmed.\n\n## Based on user's response:\n\n**If user confirms/thanks (ok, obrigado, perfeito, entendido):**\n\"Ótimo, {{name}}! 😊\nQualquer dúvida, é só chamar aqui.\nAté o dia do tratamento! 💆✨\"\n\n**If user asks about something (endereço, valor, como funciona):**\nAnswer their question directly.\n\n**If user wants to reschedule:**\nRoute to Reschedule_Flow node. The Reschedule_Flow will ask \"Para qual dia você gostaria de remarcar?\" first - DO NOT offer alternatives immediately.\n\n**If user wants to cancel:**\n\"Entendi, {{name}}. Posso cancelar o agendamento.\nPosso ajudar em outra coisa? 😊\"\n\nWait for response."
+            },
+            "name": "Confirm_Appointment",
+            "edges": [
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-confirm-to-goodbye",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User confirms receipt or thanks and has no questions"
+                        }
+                },
+                {
+                    "destination_node_id": "node-reschedule-flow",
+                    "id": "edge-confirm-to-reschedule",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants to reschedule to different time"
+                    }
+                },
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-confirm-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks questions"
+                    }
+                },
+                {
+                    "destination_node_id": "node-cancel-appointment",
+                    "id": "edge-confirm-to-cancel",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants to cancel the appointment"
+                    }
+                }
+            ],
+            "id": "node-confirm-appointment",
+            "type": "conversation",
+            "display_position": {
+                "x": 600,
+                "y": 100
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "CHAT TYPE: 'followup' - User is returning after a previous conversation ended.\n\nThis is a RETURNING user who previously chatted with us. Be welcoming but don't repeat old information.\n\n## Your Task:\nGreet them warmly and ask how you can help:\n\n\"Olá novamente, {{name}}! 😊✨\nComo posso te ajudar?\"\n\nWait for their response and then help accordingly:\n\n**If user asks about their existing appointment:**\nCheck and provide appointment details, offer to reschedule if needed.\n\n**If user has a new question:**\nAnswer directly and helpfully.\n\n**If user wants to schedule a new treatment:**\nShow available slots: \"Temos os seguintes horários disponíveis:\\n{{available_slots}}\\n\\nQual funciona para você? 📅\"\n\n**If user wants to reschedule:**\nGo to reschedule flow.\n\n**If user wants to cancel:**\nGo to cancel flow.\n\nWait for response."
+            },
+            "name": "Followup_Flow",
+            "edges": [
+                {
+                    "destination_node_id": "node-offer-alternatives",
+                    "id": "edge-followup-to-alternatives",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants to schedule a new treatment or see available times"
+                    }
+                },
+                {
+                    "destination_node_id": "node-reschedule-flow",
+                    "id": "edge-followup-to-reschedule",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants to reschedule their existing appointment"
+                    }
+                },
+                {
+                    "destination_node_id": "node-cancel-appointment",
+                    "id": "edge-followup-to-cancel",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants to cancel their appointment"
+                    }
+                },
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-followup-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks questions about treatment, price, etc."
+                    }
+                },
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-followup-to-goodbye",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User just wants to say hi or has no specific request"
+                    }
+                }
+            ],
+            "id": "node-followup-flow",
+            "type": "conversation",
+            "display_position": {
+                "x": 600,
+                "y": 200
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "User wants to reschedule their existing appointment.\n\n\"Sem problemas, {{name}}! 😊\nVamos encontrar um novo horário para você.\n\nPara qual dia você gostaria de remarcar?\"\n\nWait for user to tell their preferred date. DO NOT show available slots yet - first ask which date they prefer, then check availability for that date."
+            },
+            "name": "Reschedule_Flow",
+            "edges": [
+                {
+                    "destination_node_id": "node-extract-reschedule-details",
+                    "id": "edge-reschedule-to-extract",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User selects a new date and time"
+                    }
+                },
+                {
+                    "destination_node_id": "node-extract-requested-date",
+                    "id": "edge-reschedule-to-check-date",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks for a specific date not in the available list"
+                    }
+                },
+                {
+                    "destination_node_id": "node-cancel-appointment",
+                    "id": "edge-reschedule-to-cancel",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User decides to cancel instead"
+                    }
+                },
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-reschedule-to-goodbye-keep",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User changes mind and wants to keep original appointment"
+                    }
+                }
+            ],
+            "id": "node-reschedule-flow",
+            "type": "conversation",
+            "display_position": {
+                "x": 1600,
+                "y": 200
+            }
+        },
+        {
+            "name": "Extract_Reschedule_Details",
+            "edges": [
+                {
+                    "destination_node_id": "node-execute-reschedule",
+                    "id": "edge-extract-reschedule-to-execute",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After extracting reschedule details"
+                    }
+                }
+            ],
+            "variables": [
+                {
+                    "name": "new_date",
+                    "description": "The new date the user wants to reschedule to in ISO format (YYYY-MM-DD). Extract from the conversation context.",
+                    "type": "string",
+                    "choices": []
+                },
+                {
+                    "name": "new_time",
+                    "description": "The new time the user wants to reschedule to in HH:MM format (24-hour). Extract from the conversation context.",
+                    "type": "string",
+                    "choices": []
+                }
+            ],
+            "id": "node-extract-reschedule-details",
+            "type": "extract_dynamic_variables",
+            "display_position": {
+                "x": 2100,
+                "y": 500
+            }
+        },
+        {
+            "tool_id": "tool-reschedule-appointment",
+            "instruction": {
+                "type": "static_text",
+                "text": "Reagendando seu tratamento... ⏳"
+            },
+            "name": "Execute_Reschedule",
+            "edges": [
+                {
+                    "destination_node_id": "node-reschedule-success",
+                    "id": "edge-execute-reschedule-to-success",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After reschedule is complete"
+                    }
+                }
+            ],
+            "id": "node-execute-reschedule",
+            "type": "function",
+            "tool_type": "local",
+            "speak_during_execution": false,
+            "display_position": {
+                "x": 2600,
+                "y": 500
+            },
+            "wait_for_result": true
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Reschedule completed.\n\nIf {{reschedule_success}} is true:\n\"Pronto, {{name}}! Reagendamento confirmado! 🎉✅\n\n📅 {{confirmed_date}}\n⏰ {{confirmed_time}}\n📍 {{location}}\n\nVocê receberá um lembrete antes do tratamento.\n\nPosso ajudar com mais alguma coisa? 😊\"\n\nIf reschedule failed:\n\"Ops, tivemos um probleminha técnico. 😕\nVou encaminhar para nossa equipe fazer o reagendamento manualmente.\n\nTe retornam em breve! 😊\"\n\nWait for response."
+            },
+            "name": "Reschedule_Success",
+            "edges": [
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-reschedule-success-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User has questions"
+                    }
+                },
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-reschedule-success-to-goodbye",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User confirms or has no more questions"
+                    }
+                }
+            ],
+            "id": "node-reschedule-success",
+            "type": "conversation",
+            "display_position": {
+                "x": 3100,
+                "y": 500
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "CHAT TYPE: 'other' - User contacted us directly through WhatsApp (not replying to a template).\n\nStart with a warm, energetic greeting:\n\n\"Olá! 👋✨\nSou {{agent_name}}, assistente da {{business_name}}.\n\nComo posso te ajudar hoje? 😊\"\n\nWait for user to explain what they need."
+            },
+            "name": "Other_Greeting",
+            "edges": [
+                {
+                    "destination_node_id": "node-other-discovery",
+                    "id": "edge-other-greeting-to-discovery",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User explains their need or asks about services"
+                    }
+                }
+            ],
+            "id": "node-other-greeting",
+            "type": "conversation",
+            "display_position": {
+                "x": 600,
+                "y": 300
+            }
+            },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "For 'other' type - Gather information about what the user needs.\n\nAsk ONE question at a time:\n\n1. If we don't know their concern:\n   \"Me conta um pouquinho: o que está acontecendo com sua pele? O que te incomoda? 😊\"\n\n2. If we know their concern but not the treatment:\n   \"Entendi! E você já tem algum tratamento em mente, ou quer que eu te ajude a encontrar o ideal?\"\n\n3. After gathering info:\n   \"Perfeito! Deixa eu verificar o melhor tratamento para você... 💆\"\n\nThen transition to recommend treatment.\n\nDon't ask all questions at once - be conversational and natural."
+            },
+            "name": "Other_Discovery",
+            "edges": [
+                {
+                    "destination_node_id": "node-recommend-treatment",
+                    "id": "edge-discovery-to-recommend",
+                "transition_condition": {
+                    "type": "prompt",
+                        "prompt": "We have enough information to recommend a treatment"
+                }
+                }
+            ],
+            "id": "node-other-discovery",
+            "type": "conversation",
+            "display_position": {
+                "x": 1100,
+                "y": 300
+            }
+        },
+        {
+            "tool_id": "tool-recommend-treatment",
+            "instruction": {
+                "type": "static_text",
+                "text": "Verificando o melhor tratamento para você... 💆"
+            },
+            "name": "Recommend_Treatment",
+            "edges": [
+                {
+                    "destination_node_id": "node-other-present-treatment",
+                    "id": "edge-recommend-to-present",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After getting treatment recommendation"
+                    }
+                }
+            ],
+            "id": "node-recommend-treatment",
+            "type": "function",
+            "tool_type": "local",
+            "speak_during_execution": false,
+            "display_position": {
+                "x": 1600,
+                "y": 300
+            },
+            "wait_for_result": true
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Present the recommended treatment to the user:\n\n\"Encontrei o tratamento ideal para você! 😊\n\n💆 *{{treatment_name}}*\n✨ {{treatment_benefit}}\n\n⏱️ Duração: {{session_duration}}\n💰 Investimento: {{treatment_price}}\n📋 Sessões: {{recommended_sessions}}\n\nNossos clientes sempre dizem: {{client_feedback}}\n\nGostaria de ver os horários disponíveis?\"\n\nWait for response."
+        },
+            "name": "Other_Present_Treatment",
+            "edges": [
+                {
+                    "destination_node_id": "node-offer-alternatives",
+                    "id": "edge-present-to-alternatives",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User agrees and wants to see available times"
+                    }
+                },
+                {
+                    "destination_node_id": "node-recommend-another-treatment",
+                    "id": "edge-present-to-another",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants to see another treatment option"
+                    }
+                },
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-present-to-qa",
+                    "transition_condition": {
+                "type": "prompt",
+                        "prompt": "User asks questions about the treatment"
+            }
+        },
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-present-to-goodbye",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User declines"
+                    }
+                }
+            ],
+            "id": "node-other-present-treatment",
+            "type": "conversation",
+            "display_position": {
+                "x": 2100,
+                "y": 300
+            }
+            },
+        {
+            "tool_id": "tool-recommend-treatment",
+            "instruction": {
+                "type": "static_text",
+                "text": "Verificando outro tratamento para você... 💆"
+            },
+            "name": "Maybe_Recommend_Another_Treatment",
+            "edges": [
+                {
+                    "destination_node_id": "node-present-new-treatment",
+                    "id": "edge-another-to-present",
+                    "transition_condition": {
+                        "type": "equation",
+                        "equations": [
+                            {
+                                "left": "{{another_treatment_available}}",
+                                "operator": "==",
+                                "right": "true"
+                            }
+                        ],
+                        "operator": "||"
+                    }
+                },
+                {
+                    "destination_node_id": "node-no-other-treatment",
+                    "id": "edge-another-to-none",
+                "transition_condition": {
+                    "type": "prompt",
+                        "prompt": "{{another_treatment_available}} = false"
+                }
+                }
+            ],
+            "id": "node-recommend-another-treatment",
+            "type": "function",
+            "tool_type": "local",
+            "speak_during_execution": false,
+            "display_position": {
+                "x": 2600,
+                "y": 300
+            },
+            "wait_for_result": true
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Present the new treatment:\n\n\"Encontrei outro tratamento para você! 😊\n\n💆 *{{treatment_name}}*\n✨ {{treatment_benefit}}\n\n💰 Valor: {{treatment_price}}\n⏱️ Duração: {{session_duration}}\n📋 Sessões recomendadas: {{recommended_sessions}}\n\nO que você acha?\"\n\nWait for response."
+            },
+            "name": "Present_New_Treatment",
+            "edges": [
+                {
+                    "destination_node_id": "node-offer-alternatives",
+                    "id": "edge-new-treatment-to-alternatives",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User likes this treatment and wants to see times"
+                    }
+                },
+                {
+                    "destination_node_id": "node-recommend-another-treatment",
+                    "id": "edge-new-treatment-to-another",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants yet another option"
+                    }
+                },
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-new-treatment-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks questions"
+                    }
+                },
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-new-treatment-to-goodbye",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User declines"
+                    }
+                }
+            ],
+            "id": "node-present-new-treatment",
+            "type": "conversation",
+            "display_position": {
+                "x": 3100,
+                "y": 200
+            }
+        },
+        {
+            "instruction": {
+                        "type": "prompt",
+                "text": "No other treatment available.\n\n\"Infelizmente, no momento apenas {{treatment_name}} está disponível para o que você procura. 😊\n\nGostaria de agendar?\"\n\nWait for response."
+                },
+            "name": "No_Other_Treatment",
+            "edges": [
+                {
+                    "destination_node_id": "node-offer-alternatives",
+                    "id": "edge-no-other-to-alternatives",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User agrees to book current treatment"
+                    }
+                },
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-no-other-to-goodbye",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User declines"
+                    }
+                }
+            ],
+            "id": "node-no-other-treatment",
+            "type": "conversation",
+            "display_position": {
+                "x": 3100,
+                "y": 400
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Show available dates/times.\n\n\"Temos os seguintes horários disponíveis:\n\n{{available_slots}}\n\nQual funciona melhor para você? 😊\"\n\nIf user asks for a SPECIFIC date not in the list, transition to extract date.\n\nWait for response."
+            },
+            "name": "Offer_Alternatives",
+            "edges": [
+                {
+                    "destination_node_id": "node-final-confirmation",
+                    "id": "edge-alternatives-to-final",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User selects one of the offered times"
+                    }
+                },
+                {
+                    "destination_node_id": "node-extract-requested-date",
+                    "id": "edge-alternatives-to-extract",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks for a specific date not in the list"
+                    }
+                },
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-alternatives-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks questions"
+                    }
+                },
+                {
+                    "destination_node_id": "node-offer-callback",
+                    "id": "edge-alternatives-to-callback",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants earlier date but none available"
+                    }
+                }
+            ],
+            "id": "node-offer-alternatives",
+            "type": "conversation",
+            "display_position": {
+                "x": 2100,
+                "y": 0
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Answer the user's question directly.\n\nCommon questions and answers:\n\n**Price:**\n\"O valor é {{treatment_price}} por sessão. 💰\n{{payment_methods}}\"\n\n**Package:**\n\"Temos um pacote de {{package_sessions_count}} sessões por {{package_price}}. 📦\"\n\n**Duration:**\n\"O tratamento leva cerca de {{session_duration}}. ⏱️\"\n\n**How it works:**\n\"{{treatment_name}} proporciona {{treatment_effects}}.\nVocê já percebe os resultados logo de cara! ✨\"\n\n**Sessions:**\n\"O ideal é fazer {{recommended_sessions}} sessões com intervalo de {{interval_between_sessions}}. 📋\"\n\n**Results:**\n\"O tratamento deixa sua pele com aquele aspecto {{treatment_result}}. ✨\nNossos clientes sempre dizem: {{client_feedback}}\"\n\n**Other services:**\n\"Também oferecemos: {{other_services}} 💆\nInteresse em algum?\"\n\nAfter answering:\n\"Posso ajudar com mais alguma coisa? 😊\"\n\nOR if in booking flow:\n\"Posso confirmar o horário para você?\"\n\nWait for response."
+            },
+            "name": "Answer_Questions",
+            "edges": [
+                {
+                    "destination_node_id": "node-final-confirmation",
+                    "id": "edge-qa-to-final",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User is ready to confirm appointment"
+                    }
+                },
+                {
+                    "destination_node_id": "node-offer-alternatives",
+                    "id": "edge-qa-to-alternatives",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants to see available times"
+                            }
+                },
+                {
+                    "destination_node_id": "node-recommend-another-treatment",
+                    "id": "edge-qa-to-recommend",
+                    "transition_condition": {
+                "type": "prompt",
+                        "prompt": "User asks for another treatment option"
+                    }
+                },
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-qa-to-goodbye",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants to end conversation"
+                    }
+                }
+            ],
+            "id": "node-answer-questions",
+            "type": "conversation",
+            "display_position": {
+                "x": 2600,
+                "y": 0
+            }
+        },
+        {
+            "name": "Extract_Requested_Date",
+            "edges": [
+                {
+                    "destination_node_id": "node-check-availability",
+                    "id": "edge-extract-to-check",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After extracting date"
+                    }
+                            }
+                        ],
+            "variables": [
+                {
+                    "name": "date",
+                    "description": "The specific date the user is asking about in ISO format (YYYY-MM-DD). If user mentions only day and month without year, use current year {{current_year}}. If user asks for 'another date' without specifying, use the next day after {{suggested_date}}.",
+                    "type": "string",
+                    "choices": []
+                }
+            ],
+            "id": "node-extract-requested-date",
+            "type": "extract_dynamic_variables",
+            "display_position": {
+                "x": 2600,
+                "y": -300
+            }
+        },
+        {
+            "tool_id": "tool-check-availability",
+            "instruction": {
+                "type": "static_text",
+                "text": "Verificando disponibilidade... ⏳"
+            },
+            "name": "Check_Availability",
+            "edges": [
+                {
+                    "destination_node_id": "node-present-availability-results",
+                    "id": "edge-check-to-present",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After checking availability"
+                    }
+                }
+            ],
+            "id": "node-check-availability",
+            "type": "function",
+            "tool_type": "local",
+            "speak_during_execution": false,
+            "display_position": {
+                "x": 3100,
+                "y": -300
+            },
+            "wait_for_result": true
+        },
+        {
+            "name": "Present_Availability_Results",
+            "edges": [
+                {
+                    "destination_node_id": "node-final-confirmation",
+                    "id": "edge-present-to-final",
+                "transition_condition": {
+                    "type": "prompt",
+                        "prompt": "User selects a time slot"
+                    }
+                },
+                {
+                    "destination_node_id": "node-reschedule-flow",
+                    "id": "edge-present-to-reschedule",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants to reschedule their appointment"
+                    }
+                },
+                {
+                    "destination_node_id": "node-extract-requested-date",
+                    "id": "edge-present-to-extract",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks about another date"
+            }
+        },
+        {
+                    "destination_node_id": "node-offer-callback",
+                    "id": "edge-present-to-callback",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants earlier date but none available"
+                    }
+                },
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-present-avail-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks questions"
+                    }
+                }
+            ],
+            "id": "node-present-availability-results",
+            "type": "conversation",
+            "display_position": {
+                "x": 3600,
+                "y": -300
+            },
+            "instruction": {
+                "type": "prompt",
+                "text": "Present the availability results from the check-availability function.\n\nIf {{available}} is true and we have {{availableSlots}}:\n\"Ótimo! Temos horários disponíveis para essa data! 😊\n\n👉 [Format each slot from availableSlots]\n\nQual funciona para você?\"\n\nIf {{available}} is false (no slots for the requested date):\n\"Infelizmente não temos horários disponíveis para essa data específica. 😕\n\nPara qual outra data você gostaria que eu verificasse?\"\n\nIMPORTANT: Do NOT show {{available_slots}} when {{available}} is false - those are pre-loaded slots that may be for different dates. Only show slots from {{availableSlots}} when {{available}} is true.\n\nWait for response."
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "When no suitable alternatives available or user wants much earlier date.\n\n\"Entendo, {{name}}! 😊\n\nA agenda está bem cheia, mas vou verificar se conseguimos um encaixe.\n\nTe retorno pelo WhatsApp entre hoje e amanhã, pode ser?\"\n\nWait for response."
+            },
+            "name": "Offer_Callback",
+            "edges": [
+                {
+                    "destination_node_id": "node-callback-confirmed",
+                    "id": "edge-callback-agreed",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User agrees to wait for callback"
+                    }
+                },
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-callback-to-goodbye",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User declines"
+                    }
+                }
+            ],
+            "id": "node-offer-callback",
+            "type": "conversation",
+            "display_position": {
+                "x": 3100,
+                "y": -100
+                    }
+                },
+                {
+            "instruction": {
+                "type": "prompt",
+                "text": "User agreed to wait for callback about earlier availability.\n\n\"Perfeito, {{name}}! 😊\n\nVou tentar conseguir um encaixe e te retorno pelo WhatsApp entre hoje e amanhã.\n\nPosso ajudar com mais alguma coisa?\"\n\nWait for response.\n\nIf user says no more questions:\n\"Ótimo! Até breve então! 👋✨\""
+            },
+            "name": "Callback_Confirmed",
+            "edges": [
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-callback-confirmed-to-goodbye",
+                "transition_condition": {
+                    "type": "prompt",
+                        "prompt": "User has no more questions or says goodbye"
+            }
+        },
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-callback-confirmed-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User has questions"
+                    }
+                }
+            ],
+            "id": "node-callback-confirmed",
+            "type": "conversation",
+            "display_position": {
+                "x": 3600,
+                "y": -100
+            }
+            },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Final confirmation of the selected time slot.\n\n**Step 1 - Confirm with date/time:**\n\"Perfeito, {{name}}! 🎉\n\nVou agendar seu tratamento:\n\n💆 {{treatment_name}}\n📅 [Selected date and time]\n💰 {{treatment_price}}\n\nConfirmo o agendamento?\"\n\nWait for user to confirm.\n\n**If user confirms:**\nProceed to extract the selected date and time, then book the appointment.\n\n**If user asks to change:**\nGo back to offer alternatives."
+        },
+            "name": "Final_Confirmation",
+            "edges": [
+                {
+                    "destination_node_id": "node-extract-booking-details",
+                    "id": "edge-final-to-extract-booking",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User confirms they want to book"
+                    }
+                },
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-final-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User has questions"
+                    }
+                },
+                {
+                    "destination_node_id": "node-offer-alternatives",
+                    "id": "edge-final-to-alternatives",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants to change the time"
+                    }
+                }
+            ],
+            "id": "node-final-confirmation",
+            "type": "conversation",
+            "display_position": {
+                "x": 3100,
+                "y": 100
+            }
+            },
+        {
+            "name": "Extract_Booking_Details",
+            "edges": [
+                {
+                    "destination_node_id": "node-execute-booking",
+                    "id": "edge-extract-booking-to-execute",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After extracting booking details"
+                    }
+                }
+            ],
+            "variables": [
+                {
+                    "name": "selected_date",
+                    "description": "The date the user selected for their appointment in ISO format (YYYY-MM-DD). Extract from the conversation context - the date they confirmed.",
+                    "type": "string",
+                    "choices": []
+                },
+                {
+                    "name": "selected_time",
+                    "description": "The time the user selected for their appointment in HH:MM format (24-hour). Extract from the conversation context - the time they confirmed.",
+                    "type": "string",
+                    "choices": []
+                }
+            ],
+            "id": "node-extract-booking-details",
+            "type": "extract_dynamic_variables",
+            "display_position": {
+                "x": 3600,
+                "y": 200
+            }
+        },
+        {
+            "tool_id": "tool-book-appointment",
+            "instruction": {
+                "type": "static_text",
+                "text": "Confirmando seu agendamento... ✅"
+            },
+            "name": "Execute_Booking",
+            "edges": [
+                {
+                    "destination_node_id": "node-booking-success",
+                    "id": "edge-execute-to-success",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After booking is complete"
+                    }
+                }
+            ],
+            "id": "node-execute-booking",
+            "type": "function",
+            "tool_type": "local",
+            "speak_during_execution": false,
+            "display_position": {
+                "x": 4100,
+                "y": 200
+            },
+            "wait_for_result": true
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Booking was successful! Confirm to the user.\n\nIf {{booking_success}} is true:\n\"Agendamento confirmado! 🎉✅\n\n📅 {{confirmed_date}}\n⏰ {{confirmed_time}}\n📍 {{location}}\n\nVocê receberá um lembrete antes do seu tratamento.\n\nPosso ajudar com mais alguma coisa? 😊\"\n\nIf booking failed:\n\"Ops, tivemos um probleminha técnico. 😕\nMas não se preocupe! Vou encaminhar seus dados para nossa equipe confirmar manualmente.\n\nTe retornam em breve! 😊\"\n\nWait for response."
+            },
+            "name": "Booking_Success",
+            "edges": [
+                {
+                    "destination_node_id": "node-answer-questions",
+                    "id": "edge-success-to-qa",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User has questions"
+                    }
+                },
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-success-to-goodbye",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User confirms or has no more questions"
+                    }
+                }
+            ],
+            "id": "node-booking-success",
+            "type": "conversation",
+            "display_position": {
+                "x": 4600,
+                "y": 200
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "User wants to cancel their appointment.\n\n\"Entendi, {{name}}.\nTem certeza que deseja cancelar o agendamento?\"\n\nWait for user to confirm cancellation."
+            },
+            "name": "Cancel_Appointment",
+            "edges": [
+                {
+                    "destination_node_id": "node-execute-cancel",
+                    "id": "edge-cancel-to-execute",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User confirms they want to cancel"
+                    }
+                },
+                {
+                    "destination_node_id": "node-offer-alternatives",
+                    "id": "edge-cancel-to-alternatives",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User changes mind and wants to reschedule instead"
+                    }
+                },
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-cancel-to-goodbye-keep",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User changes mind and wants to keep the appointment"
+                    }
+                }
+            ],
+            "id": "node-cancel-appointment",
+            "type": "conversation",
+            "display_position": {
+                "x": 1100,
+                "y": 100
+            }
+        },
+        {
+            "tool_id": "tool-cancel-appointment",
+            "instruction": {
+                "type": "static_text",
+                "text": "Cancelando agendamento... ⏳"
+            },
+            "name": "Execute_Cancel",
+            "edges": [
+                {
+                    "destination_node_id": "node-cancel-success",
+                    "id": "edge-execute-cancel-to-success",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After cancellation is complete"
+                    }
+                }
+            ],
+            "id": "node-execute-cancel",
+            "type": "function",
+            "tool_type": "local",
+            "speak_during_execution": false,
+            "display_position": {
+                "x": 1100,
+                "y": 300
+            },
+            "wait_for_result": true
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Cancellation completed.\n\nIf {{cancel_success}} is true:\n\"Agendamento cancelado! ✅\n\nSe mudar de ideia, é só chamar aqui! 😊\nPosso ajudar em mais alguma coisa?\"\n\nIf cancellation failed:\n\"Ops, não consegui cancelar automaticamente. 😕\nVou encaminhar para nossa equipe resolver.\n\nTe retornam em breve! 😊\"\n\nWait for response."
+            },
+            "name": "Cancel_Success",
+            "edges": [
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-cancel-success-to-goodbye",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User has no more requests"
+                    }
+                },
+                {
+                    "destination_node_id": "node-offer-alternatives",
+                    "id": "edge-cancel-success-to-reschedule",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants to schedule a new appointment"
+                    }
+                }
+            ],
+            "id": "node-cancel-success",
+            "type": "conversation",
+            "display_position": {
+                "x": 1100,
+                "y": 500
+            }
+        },
+        {
+            "name": "Goodbye",
+                    "instruction": {
+                        "type": "prompt",
+                "text": "End the conversation warmly.\n\n**Standard goodbye:**\n\"Qualquer coisa, é só chamar! 😊\nTenha um ótimo dia! 👋✨\"\n\n**If appointment was confirmed:**\n\"Será um prazer receber você aqui na {{business_name}}! 💆✨\nAté breve! 👋\"\n\n**If waiting for callback:**\n\"Te retorno em breve! 😊👋\"\n\nAlways be warm and leave the door open for future contact."
+                },
+            "id": "node-goodbye",
+                    "type": "end",
+                    "display_position": {
+                "x": 3600,
+                        "y": 100
+                    },
+            "speak_during_execution": false
+        }
+    ],
+    "start_node_id": "node-route-by-chat-type",
+    "start_speaker": "user",
+    "tools": [
+        {
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "date": "{{date}}",
+                "lead_id": "{{lead_id}}"
+            },
+            "description": "Check availability for a specific date",
+            "type": "custom",
+            "url": "https://app.aluri.ai/retell/check-availability",
+            "tool_id": "tool-check-availability",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "check-availability",
+            "response_variables": {
+                "available": "available",
+                "timezone": "timezone",
+                "availableSlots": "availableSlots"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "args": {
+                        "type": "object",
+                        "description": "",
+                        "properties": {
+                            "date": {
+                        "type": "string",
+                                "description": "{{date}}"
+                    },
+                            "lead_id": {
+                        "type": "string",
+                                "description": "{{lead_id}}"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "category": "{{treatment_category}}",
+                "agent_id": "{{agent_id}}",
+                "need": "{{need}}",
+                "desired_result": "{{desired_result}}",
+                "owner_id": "{{owner_id}}",
+                "exclude_treatment_id": "{{treatment_id}}",
+                "lead_id": "{{lead_id}}"
+            },
+            "description": "Recommend a treatment based on user needs",
+            "type": "custom",
+            "url": "https://app.aluri.ai/retell/recommend_treatment",
+            "tool_id": "tool-recommend-treatment",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "recommend_treatment",
+            "response_variables": {
+                "treatment_name": "agent_variables.treatment_name",
+                "treatment_price": "agent_variables.treatment_price",
+                "session_duration": "agent_variables.session_duration",
+                "recommended_sessions": "agent_variables.recommended_sessions",
+                "interval_between_sessions": "agent_variables.interval_between_sessions",
+                "treatment_effects": "agent_variables.treatment_effects",
+                "treatment_benefit": "agent_variables.treatment_benefit",
+                "treatment_result": "agent_variables.treatment_result",
+                "pain_point_1": "agent_variables.pain_point_1",
+                "pain_point_2": "agent_variables.pain_point_2",
+                "pain_point_3": "agent_variables.pain_point_3",
+                "client_feedback": "agent_variables.client_feedback",
+                "available_slots": "agent_variables.available_slots",
+                "suggested_date": "agent_variables.suggested_date",
+                "other_services": "agent_variables.other_services",
+                "payment_methods": "agent_variables.payment_methods",
+                "script_availability": "agent_variables.script_availability",
+                "another_treatment_available": "another_treatment_available"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "args": {
+                        "type": "object",
+                        "description": "",
+                        "properties": {
+                            "category": {
+                                "type": "string",
+                                "description": "{{treatment_category}}"
+                            },
+                            "agent_id": {
+                                "type": "string",
+                                "description": "{{agent_id}}"
+                            },
+                            "need": {
+                                "type": "string",
+                                "description": "{{need}}"
+                            },
+                            "desired_result": {
+                                "type": "string",
+                                "description": "{{desired_result}}"
+                            },
+                            "owner_id": {
+                                "type": "string",
+                                "description": "{{owner_id}}"
+                            },
+                            "exclude_treatment_id": {
+                                "type": "string",
+                                "description": "{{treatment_id}}"
+                            },
+                            "lead_id": {
+                                "type": "string",
+                                "description": "{{lead_id}}"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "headers": {},
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "lead_id": "{{lead_id}}",
+                "mismatched_reason": "{{mismatched_reason}}"
+            },
+            "description": "Report identity mismatch",
+            "type": "custom",
+            "url": "https://app.aluri.ai/retell/check-identity",
+            "tool_id": "tool-check-identity",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "check-identity",
+            "response_variables": {
+                "divergent": "divergent"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "lead_id": {
+                        "type": "string",
+                        "description": ""
+                    },
+                    "mismatched_reason": {
+                        "type": "string",
+                        "description": ""
+                    }
+                }
+            }
+        },
+        {
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "lead_id": "{{lead_id}}",
+                "appointment_date": "{{selected_date}}",
+                "appointment_time": "{{selected_time}}"
+            },
+            "description": "Book an appointment after user confirms date and time",
+            "type": "custom",
+            "url": "https://app.aluri.ai/retell/chat-book-appointment",
+            "tool_id": "tool-book-appointment",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "book-appointment",
+            "response_variables": {
+                "appointment_id": "appointment_id",
+                "confirmed_date": "confirmed_date",
+                "confirmed_time": "confirmed_time",
+                "location": "location",
+                "booking_success": "success",
+                "resource_name": "resource_name"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "args": {
+                        "type": "object",
+                        "description": "",
+                        "properties": {
+                            "lead_id": {
+                                "type": "string",
+                                "description": "{{lead_id}}"
+                            },
+                            "appointment_date": {
+                                "type": "string",
+                                "description": "The appointment date in YYYY-MM-DD format"
+                            },
+                            "appointment_time": {
+                                "type": "string",
+                                "description": "The appointment time in HH:MM format"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "lead_id": "{{lead_id}}",
+                "appointment_id": "{{appointment_id}}",
+                "new_date": "{{new_date}}",
+                "new_time": "{{new_time}}"
+            },
+            "description": "Reschedule an existing appointment to a new date and time",
+            "type": "custom",
+            "url": "https://app.aluri.ai/retell/chat-reschedule-appointment",
+            "tool_id": "tool-reschedule-appointment",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "reschedule-appointment",
+            "response_variables": {
+                "appointment_id": "appointment_id",
+                "confirmed_date": "confirmed_date",
+                "confirmed_time": "confirmed_time",
+                "location": "location",
+                "reschedule_success": "success"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "args": {
+                        "type": "object",
+                        "description": "",
+                        "properties": {
+                            "lead_id": {
+                                "type": "string",
+                                "description": "{{lead_id}}"
+                            },
+                            "appointment_id": {
+                                "type": "string",
+                                "description": "{{appointment_id}}"
+                            },
+                            "new_date": {
+                                "type": "string",
+                                "description": "The new appointment date in YYYY-MM-DD format"
+                            },
+                            "new_time": {
+                                "type": "string",
+                                "description": "The new appointment time in HH:MM format"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "lead_id": "{{lead_id}}",
+                "appointment_id": "{{appointment_id}}"
+            },
+            "description": "Cancel an existing appointment",
+            "type": "custom",
+            "url": "https://app.aluri.ai/retell/chat-cancel-appointment",
+            "tool_id": "tool-cancel-appointment",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "cancel-appointment",
+            "response_variables": {
+                "appointment_id": "appointment_id",
+                "cancel_success": "success",
+                "cancel_message": "message"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "args": {
+                        "type": "object",
+                        "description": "",
+                        "properties": {
+                            "lead_id": {
+                                "type": "string",
+                                "description": "{{lead_id}}"
+                            },
+                            "appointment_id": {
+                                "type": "string",
+                                "description": "{{appointment_id}}"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ],
+    "model_choice": {
+        "type": "cascading",
+        "model": "gpt-4.1",
+        "high_priority": false
+    },
+    "model_temperature": 0.3,
+    "tool_call_strict_mode": false,
+    "knowledge_base_ids": [],
+    "kb_config": {
+        "top_k": 3,
+        "filter_score": 0.6
+    },
+    "begin_tag_display_position": {
+        "x": 0,
+        "y": 0
+    },
+    "is_published": false,
+    "mcps": [],
+    "flex_mode": false
+}

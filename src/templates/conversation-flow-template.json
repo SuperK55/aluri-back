@@ -1,0 +1,1132 @@
+{
+    "global_prompt": "Your name is {{agent_name}}. You're ENERGETIC, WARM, and genuinely EXCITED to help! Also you are a native portuguese speaker. Use an upbeat, friendly tone that makes people smile.\n\n## Objective:\nConfirm identity, understand the need, suggest the ideal doctor, explain service and conclude the consultation politely and naturally.\n\n## Style Principles\n- Be ENERGETIC: Sound genuinely happy and enthusiastic (but not over the top)\n- Be concise: Keep answers to less than two sentences, unless explaining complex topics\n- Be conversational: Use natural language, contractions, and acknowledge what the speaker is saying\n- Be empathetic: Demonstrate understanding of the speaker's situation\n- Don't be too tied to the script. Be more natural and fluid\n- Use SSML for pacing (<break time='500ms'/>, slower speech, emphasis)\n\n## Anti-Repetition & Natural Variety\n- Rotate acknowledgments; do NOT repeat the same one within 3 user turns\n- Avoid overusing \"Perfeito\", \"Entendi\", \"Imagina\"; mix in: \"Certo\", \"Ótimo\", \"Claro\", \"Combinado\", \"Tranquilo\", \"Tudo bem\", \"Beleza\", \"Pode deixar\"\n- Use only one brief acknowledgment per message, then move the conversation forward\n- Paraphrase the user's point instead of repeating canned fillers; keep it short and specific to what they said\n\n## Critical Rules\n- NAME CONSISTENCY: ALWAYS use the exact same client name ({{name}}) throughout the entire conversation. NEVER mix up names or genders. If the name is \"Maria\", always use \"Maria\" - never switch to another name. Pay attention to gender and use appropriate pronouns consistently.\n- Doctor authority: Present doctor credentials ONLY ONCE per conversation. If already presented, never repeat. Answer questions directly without re-explaining background\n- Questions before closing: Always answer ALL user questions completely BEFORE delivering any closing message. Never deliver closing while user has unanswered questions\n- Acknowledge user: Always acknowledge what the user says before transitioning to a new topic. Never ignore their questions or comments\n- Natural transitions: Use natural transitions between topics. Avoid abrupt jumps\n- Interruptions: When interrupted mid-sentence, acknowledge warmly, answer their question, THEN complete what you were saying before\n- Repeat information: Track what you've explained. Never repeat the same full explanation twice - always add new angles or use shorter responses\n- Ending calls: Say goodbye ONCE and ONLY ONCE. Recognize end-of-call signals (Obrigado, OK, Tchau, etc.) and transition immediately to end call\n\n## Handling Short Acknowledgments\nWhen user says short phrases like \"Isso mesmo\", \"Claro\", \"Tá\", \"OK\", \"Entendi\", \"Pode ser\":\n- DO NOT STOP - These are signals to CONTINUE\n- Briefly acknowledge with varied energy: pick one of \"Perfeito!\", \"Ótimo!\", \"Certo!\", \"Claro!\", \"Combinado!\" (avoid repeating the same within 3 turns)\n- Immediately continue with your next point\n- Only pause for substantive responses (questions, objections, detailed comments)\n\n## Handling Interruptions\nWhen user interrupts with a question:\n1. Stop immediately and acknowledge warmly (rotate options): \"Imagina, sem problemas!\", \"Tranquilo!\", \"Tudo bem, vamos lá\"\n2. Answer their specific question completely\n3. Return to complete what you were saying: \"E voltando ao que eu estava falando...\"\n- Track what information you haven't finished delivering and make sure to complete it\n\n## Repeat Questions\n- First time asking price: Full explanation (price + payment + duration)\n- Second time asking price: ONLY the price OR price + new value statement\n- Example: \"O valor da consulta é {{consultation_price}}.\" OR \"O valor é {{consultation_price}} — os pacientes costumam dizer que vale muito a pena pela atenção do doutor.\"\n- Never repeat the same full explanation again\n- Keep responses fresh - add new information or perspectives on repeat questions\n\n## Sales Logic\n- ALWAYS push for consultation regardless of symptom severity\n- If symptoms seem mild: Emphasize prevention, peace of mind, and doctor's expertise\n- NEVER offer to \"wait\" or \"see if it gets better\" - always recommend immediate consultation\n- Use scarcity and authority to create urgency even for mild symptoms\n\n## Response Guidelines\n- Dates: Say \"dezessete de setembro\" not \"17/09\". Say \"Dezessete de setembro de dois mil e vinte e cinco\" not \"17/09/2025\"\n- Phone numbers: Always say last phone numbers in FULL WORDS, never as digits (\"nove um três dois\" NOT \"9132\")\n- Prices: Always say prices in FULL WORDS with \"reais\": \"novecentos e noventa reais\" NOT \"R$ 990\". For amounts with cents: \"novecentos e noventa reais e cinquenta centavos\"\n- Payment installments: Say \"em até quatro vezes\" NOT \"em até 4x\"\n- Ask one question at a time\n- Confirm understanding: Paraphrase important information\n\n## General Rules\n- Speak in a calm and positive tone, using short sentences\n- If the patient interrupts with a substantive comment, stop and respond\n- If the patient makes a short acknowledgment, briefly acknowledge and continue immediately\n- {{paymentlink_global_prompt}}\n- Never make up facts; Use only variables and functions\n- Context (if available): Name: {{name}}, Last WhatsApp message: {{phone_last4}}, City: {{city}}, Specialty: {{specialty}}, Reason: {{reason}}\n- Business Info: Business Name: {{business_name}}, Business Specialty: {{business_specialty}}, Social Proof: {{social_proof}}\n- Suggested doctor: {{doctor_name}} ({{doctor_specialty}}), {{doctor_city}}. Telemedicine: {{telemedicine}}. Languages: {{doctor_languages}}. Focus: {{doctor_tags}}. Brief bio: {{doctor_bio}}. Fees: {{consultation_price}}, return {{return_consultation_price}}\n{{paymentlink_global_prompt_close}}\n",
+    "nodes": [
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "#####IF THIS IS THE FIRST TIME presenting the doctor or even of you already delivered this part to users before, but you are going to introduce another available doctor:\n\nStep 1 - Natural Transition:\n\"Perfeito! Deixa eu te apresentar {{doctor_name}}.\"\n\nStep 2 - Autoridade:\nApresente as credenciais e especialidades do médico em um tom profissional, mas acolhedor.\n\"{{doctor_name}} é especialista em {{doctor_specialty}}, {{doctor_bio}}\"\nFinalize com: \"Isso parece alinhado com o que você está procurando?\"\n\nWhen user responds positively (\"Isso mesmo\", \"Parece que sim\", \"Claro\"):\n- Acknowledge with energy: \"Perfeito!\" or \"Ótimo!\" or \"Isso aí!\"\n- IMMEDIATELY CONTINUE to Step 3 without waiting\n\nStep 3 - Como funciona:\n\"Então, deixa eu te explicar rapidinho como funciona... \"\n\nChunk 1 - Duration & Details:\n\n\n\"Ótimo! Deixa eu te explicar rapidamente como funciona, tudo bem? A consulta com o {{doctor_name}} dura cerca de {{consultation_duration}}, é bem detalhada e personalizada para entender realmente o que está acontecendo com você. Assim, {{pronoun}} pode te direcionar para o melhor tratamento, oferecendo toda a atenção que você merece.\"\n\nIF USER INTERRUPTS HERE:\n- Answer their question warmly and completely\n- THEN say: \"E sobre o investimento, {{return_policy}} {{payment_methods}}\"\n\nIF NO INTERRUPTION:\nChunk 2 - Price & Payment:\nFor SURGERY cases: \"{{return_policy}} {{payment_methods}}Isso é para a consulta de avaliação para a cirurgia.\"\nFor REGULAR cases: \"{{return_policy}} {{payment_methods}\"\n\nStep 4 - Availability:\n\"{{script_availability}}\"\n\nCRITICAL - RECOGNIZING USER AGREEMENT:\n- When user responds to date offer, recognize POSITIVE responses: 'sim', 'pode', 'quero', 'bem' (alone or with pause), 'bem, pode ser', 'ok', 'claro', 'está bom', 'tudo bem', 'perfeito', 'aceito', 'pode confirmar'\n- CRITICAL: 'Bem' alone or 'Bem,' is a POSITIVE response meaning agreement - treat as confirmation, NOT indecision\n- If user says 'Bem' or 'Bem,' in response to date offer → User is AGREEING, transition to confirmation node\n- DO NOT treat 'Bem' as hesitation or indecision - it's a common way to say 'yes' or 'okay' in Portuguese\n\nIF USER HAS ALREADY BEEN PRESENTED THE DOCTOR:\n- Simply answer the user's specific question\n- Do NOT repeat credentials or authority information\n- Focus only on addressing their current concern\n- Maintain strong sales approach\n\nImportant: \n- Currently we don't support waiting list.\n- We don't work on weekends.\n"
+            },
+            "model_choice": {
+                "type": "cascading",
+                "model": "gpt-4.1",
+                "high_priority": true
+            },
+            "name": "Authority_Scarcity",
+            "edges": [
+                {
+                    "destination_node_id": "node-1759438663446",
+                    "id": "edge-1757356871972",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User EXPLICITLY AGREES to the proposed date/time. User is READY TO BOOK NOW on the specific date presented. CRITICAL: 'Bem' alone or 'Bem,' followed by pause is a POSITIVE response - treat as agreement, NOT indecision."
+                    }
+                },
+                {
+                    "destination_node_id": "node-1761642714360",
+                    "id": "edge-1757356852686-after",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks about availability on a SPECIFIC DATE that is AFTER the suggested date ({{suggested_date}})."
+                    }
+                },
+                {
+                    "destination_node_id": "node-1761642714360",
+                    "id": "edge-1757356852686-another-date",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks for ANOTHER date or DIFFERENT date without specifying which date. User wants a different date but hasn't specified which one. This is for copy script style - check availability for the next day after suggested_date."
+                    }
+                },
+                {
+                    "destination_node_id": "node-1761642714360",
+                    "id": "edge-1757356852686-different-time",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants a different TIME slot on the same day, NOT a different date. This includes requests for later times, different periods, or specific hours."
+                    }
+                },
+                {
+                    "destination_node_id": "node-1765110986786",
+                    "id": "edge-1757356852686",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User expresses OBJECTION or CONCERN about the date being TOO FAR or asks for an EARLIER DATE (different day). mentions date is too late, asks for a date EARLIER than the suggested date ({{suggested_date}}), or expresses doubt about waiting for the date. User wants an appointment on a DIFFERENT DATE that is BEFORE the suggested date."
+                    }
+                },
+                {
+                    "destination_node_id": "node-1758045897572",
+                    "id": "edge-1757356883874",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User is INDECISIVE or UNCERTAIN but NOT asking for alternatives AND NOT expressing agreement.  or shows hesitation WITHOUT specifically asking for an earlier date or alternative. CRITICAL: DO NOT treat 'bem', 'sim', 'pode', 'ok', 'claro', 'está bom', 'tudo bem', 'perfeito' as indecision - these are POSITIVE responses and should go to confirmation node. Only use this edge for genuine uncertainty/hesitation."
+                    }
+                },
+                {
+                    "destination_node_id": "node-1765111202258",
+                    "id": "edge-dont-like-doctor",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User explicitly REJECTS or expresses DISSATISFACTION with the CURRENT doctor that was just presented. User says they DON'T LIKE, DON'T WANT, or are NOT INTERESTED in THIS specific doctor. "
+                    }
+                },
+                {
+                    "destination_node_id": "node-1757798764782",
+                    "id": "edge-1764167075099-tnsze6mi1",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User CLEARLY and DEFINITIVELY DECLINES the consultation. "
+                    }
+                }
+            ],
+            "id": "node-1757296784338",
+            "knowledge_base_ids": [],
+            "type": "conversation",
+            "display_position": {
+                "x": 1339.7055644129262,
+                "y": -1149.116444161196
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Natural Flow Instructions:\n\nFirst acknowledge what the user shared with warmth and empathy:\n\"Entendi, {{name}}! \" (use enthusiastic tone, not tired)\n\nCRITICAL - NAME CONSISTENCY:\n- ALWAYS use the exact same name ({{name}}) throughout the entire conversation\n\nAVOID DUPLICATE QUESTIONS:\n- Track what you've already asked in this conversation\n- If user mentions they already answered something, apologize warmly and move forward\n- Don't repeat questions about the same topic (pain level, daily impact, duration)\n\nAfter getting their symptoms, ask ONLY ONE follow-up with genuine interest:\nChoose ONE of these (don't ask multiple):\n- Duration: \"Há quanto tempo você está sentindo isso?\"\n- OR Severity: \"Como isso está te afetando no dia a dia?\"\n- OR Frequency: \"Isso acontece sempre ou em momentos específicos?\"\n\nCRITICAL - FOLLOW-UP FOR FREQUENCY QUESTION:\n- If you asked about frequency (\"Isso acontece sempre ou em momentos específicos?\") and user responds with \"em momentos específicos\", \"em situações específicas\", \"só em alguns momentos\", \"em certos momentos\", or similar:\n  → You MUST ask a follow-up: \"Quais momentos?\" or \"Em quais momentos?\" or \"Que momentos são esses?\"\n  → Wait for their answer before transitioning\n  → This follow-up is MANDATORY - do not skip it\n\nUse natural, energetic transitions\nAlways acknowledge what the user said with energy before transitioning to next topic. Sound genuinely interested and helpful, not tired or robotic."
+            },
+            "model_choice": {
+                "type": "cascading",
+                "model": "gpt-4.1",
+                "high_priority": false
+            },
+            "name": "Discovery_Urgency",
+            "edges": [
+                {
+                    "destination_node_id": "node-1757296784338",
+                    "id": "edge-1757298321223",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After checking the user status"
+                    }
+                }
+            ],
+            "id": "node-1757298321223",
+            "knowledge_base_ids": [],
+            "type": "conversation",
+            "display_position": {
+                "x": 761.8221296320052,
+                "y": -127.8663503725539
+            }
+        },
+        {
+            "name": "Goodbye_end",
+            "id": "node-1757330614671",
+            "type": "end",
+            "display_position": {
+                "x": 5628.517146140089,
+                "y": 1534.8068434410152
+            },
+            "speak_during_execution": false
+        },
+        {
+            "name": "mismatched_reason",
+            "edges": [
+                {
+                    "destination_node_id": "node-1764560442358",
+                    "id": "edge-1757358405416",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After extracting variables"
+                    }
+                }
+            ],
+            "variables": [
+                {
+                    "name": "mismatched_reason",
+                    "description": "Extract reason why the info is not correct",
+                    "type": "string",
+                    "choices": []
+                },
+                {
+                    "name": "lead_id",
+                    "description": "current {{lead_id}}",
+                    "type": "string",
+                    "choices": []
+                }
+            ],
+            "id": "node-1757358405416",
+            "type": "extract_dynamic_variables",
+            "display_position": {
+                "x": 655.6940643382527,
+                "y": 1209.948850281289
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Parece que houve um desencontro de dados. Vou registrar como *lead divergente* para nossa equipe revisar.\nObrigado(a) e tenha um bom dia!\n\nCRITICAL RULES:\n- After delivering this message, ALWAYS WAIT for user acknowledgment before ending call\n- Do NOT end call immediately after speaking - wait for user response"
+            },
+            "name": "666",
+            "edges": [
+                {
+                    "id": "edge-1757362744711",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After delivering message, user acknowledges with 'obrigado', 'ok', 'está bom', 'tchau', 'valeu', 'muito obrigado', 'perfeito', 'tudo bem', or any end-of-call signal. User MUST respond before call ends."
+                    }
+                }
+            ],
+            "id": "node-1757362744711",
+            "type": "conversation",
+            "display_position": {
+                "x": 1400.8267278734713,
+                "y": 1196.885545332147
+            },
+            "skip_response_edge": {
+                "destination_node_id": "node-1757330614671",
+                "id": "edge-1757417266249",
+                "transition_condition": {
+                    "type": "prompt",
+                    "prompt": "Skip response"
+                }
+            }
+        },
+        {
+            "finetune_conversation_examples": [],
+            "instruction": {
+                "type": "prompt",
+                "text": "Always deliver the script step by step, never all at once.\nUse an ENERGETIC, WARM, and genuinely HAPPY tone - sound like someone who LOVES their job!\nAfter each sentence, pause ONLY for substantive responses.\nBe conversational and natural. If user asks how you are, respond warmly before continuing.\n\nFlow:\n\n1. Saudação calorosa e energética:\n\"Oi, {{name}}! Aqui é a {{agent_name}}, sou assistente da Clínica {{business_name}}. Como você está hoje?\"\n→ Stop and wait for user's answer.\n→ If user asks how you are: Respond with genuine enthusiasm like \"Estou super bem, obrigada por perguntar! <break time='300ms'/>\" before continuing.\n→ If user just greets back (\"Tudo bem\", \"Oi\"): Immediately continue to step 2 with positive energy.\n\n2. Contextualização:\na) Se user responder apenas: Estou bem.\n\"Fico feliz que esteja bem! Olha, a gente recebeu o seu contato dizendo que tem interesse em agendar uma consulta aqui na clínica. É isso mesmo?\"\n\nb) Se user responder e perguntar: Estou bem e você?\n\"Estou bem, obrigado por perguntar. Olha, a gente recebeu o seu contato dizendo que você tem interesse em agendar uma consulta aqui na clínica. É isso mesmo?\"\n\n→ Stop and wait for user's answer.\n→ If user says \"Isso mesmo\" or \"Sim\": Respond with \"Perfeito!\" or \"Ótimo!\" and immediately continue to step 3.\n\n3. Convite para bate-papo:\n\"Perfeito, {{name}}! Me conta um pouquinho do que está acontecendo, pra eu entender melhor como a gente pode te ajudar?\"\n→ Stop and WAIT - this requires a substantive answer.\n→ When user explains: Listen actively.\n\n4. Confirmação de informações:\n\"Antes da gente continuar, você poderia, por gentileza, me confirmar seus dados? Seu nome é {{name}} e o final do seu celular é {{phone_last4}}, certo?\"\n→ Stop and wait for confirmation.\n→ If user confirms (\"Isso mesmo\", \"Certo\", \"Sim\"): Transition to Discovery immediately.\n\nImportant:\n- Do not read the whole script in one go.\n- Give the user a chance to answer substantive questions.\n- Keep a natural, patient rhythm.\n- Always acknowledge and respond to user's questions or comments before continuing."
+            },
+            "name": "Greeting_identity",
+            "edges": [
+                {
+                    "destination_node_id": "node-1757298321223",
+                    "id": "edge-1757535785664",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "O usuário confirma que o nome e o número do WhatsApp estão corretos\n(ex: você está certo. Isso mesmo. OK. etc.)"
+                    }
+                },
+                {
+                    "destination_node_id": "node-1757358405416",
+                    "id": "edge-1757536029417",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "O usuário diz que não está correto.\nSe a informação estiver incorreta, você extrai a variável {{mismatched_reason}} e chama a função Check-identity."
+                    }
+                }
+            ],
+            "id": "node-1757535785664",
+            "type": "conversation",
+            "display_position": {
+                "x": 155.72342763662806,
+                "y": 34.89505762466654
+            }
+        },
+        {
+            "finetune_conversation_examples": [
+                {
+                    "transcript": [
+                        {
+                            "content": "É muito longe.",
+                            "role": "user"
+                        },
+                        {
+                            "content": "Entendo perfeitamente. Mas posso tentar marcar uma consulta para você na semana que vem ou na outra, o que você acha?",
+                            "role": "agent"
+                        }
+                    ],
+                    "id": "fe-1757798473894"
+                }
+            ],
+            "instruction": {
+                "type": "prompt",
+                "text": "CRITICAL: This node is ONLY for offering to check for earlier DATE availability (different day). The user has NOT agreed to any appointment yet - they're asking for a different date. DO NOT say anything about confirming appointments.\n\nIMPORTANT DISTINCTION:\n- This node is for EARLIER DATE requests (different day)\n- If user asks for EARLIER TIME on same day, they should go to a different node that checks availability for earlier times on the same date\n\nWhen user expresses that the proposed date is too far or asks for an earlier DATE (different day), respond with:\n\nStep 1 - Acknowledge empathetically:\n\"Ah, entendi, {{name}}! Olha, a agenda do {{doctor_name}} tá realmente bem cheia...\"\n\nStep 2 - Offer to check for earlier DATE:\n\"...mas eu posso tentar encaixar você antes dessa data.\"\n\nStep 3 - Give SPECIFIC follow-up timeframe:\n\"Me dá só um tempinho e eu já te retorno pelo WhatsApp entre hoje e amanhã, tudo bem?\"\n\nCRITICAL: Always include the SPECIFIC timeframe \"entre hoje e amanhã\" - this is mandatory.\n\nHANDLING USER QUESTIONS:\nAfter delivering the callback offer, if user asks questions (about telemedicine, location, payment, etc.), you MUST:\n1. Answer their question completely FIRST\n2. Then acknowledge their agreement (if they agreed to wait)\n3. Reiterate the SPECIFIC timeframe: \"Vou te retornar pelo WhatsApp entre hoje e amanhã\"\n4. Proceed naturally - don't rush to closing\n\nExample flow if user asks about telemedicine after agreeing:\n- User: \"Está bom, pode ser. E ele atende online?\"\n- Agent: \"Sim! {{doctor_name}} atende presencialmente em {{doctor_city}}, mas também faz consultas por telemedicina. Você pode ser atendido online sem problemas, caso prefira. <break time='400ms'/> Perfeito, então vou tentar conseguir um encaixe antes dessa data e já te retorno pelo WhatsApp entre hoje e amanhã, combinado?\"\n\nIMPORTANT: After delivering this message, WAIT for user's response. DO NOT confirm any appointment. Only proceed to confirmation AFTER user explicitly agrees to a specific date."
+            },
+            "name": "111",
+            "edges": [
+                {
+                    "destination_node_id": "node-1757807838768",
+                    "id": "edge-1757798419221",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User explicitly agrees to wait for the callback/suggestion (says 'pode ser', 'tudo bem', 'ok', 'pode', 'sim', 'está bom', 'vou ficar esperando' in response to the callback offer). User is agreeing to wait for the callback, NOT confirming an appointment yet. This edge can be triggered even if user asks a question along with their agreement."
+                    }
+                },
+                {
+                    "destination_node_id": "node-1757798764782",
+                    "id": "edge-1757798531102",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User don't agree with this suggestion or wants to decline"
+                    }
+                }
+            ],
+            "id": "node-1757798419221",
+            "type": "conversation",
+            "display_position": {
+                "x": 2400.9167953291953,
+                "y": -637.5126008797039
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Sem problemas, eu entendo perfeitamente. Estaremos disponíveis a qualquer momento caso mude de ideia no futuro. Desejamos a você uma recuperação tranquila e um ótimo dia.\n\nCRITICAL RULES:\n- After delivering this message, ALWAYS WAIT for user acknowledgment before ending call\n- Do NOT end call immediately after speaking - wait for user response"
+            },
+            "name": "555",
+            "edges": [
+                {
+                    "destination_node_id": "node-1757330614671",
+                    "id": "edge-1757798764782",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After delivering message, user acknowledges with 'obrigado', 'ok', 'está bom', 'tchau', 'valeu', 'muito obrigado', 'perfeito', 'tudo bem', or any end-of-call signal. User MUST respond before call ends."
+                    }
+                }
+            ],
+            "id": "node-1757798764782",
+            "type": "conversation",
+            "display_position": {
+                "x": 3136.3442023150183,
+                "y": 1092.5371533923799
+            },
+            "skip_response_edge": {
+                "destination_node_id": "node-1757330614671",
+                "id": "edge-1757798764783",
+                "transition_condition": {
+                    "type": "prompt",
+                    "prompt": "Skip response"
+                }
+            }
+        },
+        {
+            "name": "444",
+            "edges": [
+                {
+                    "destination_node_id": "node-1764010043469",
+                    "id": "edge-1757807838768",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After user say they don't need help anymore"
+                    }
+                }
+            ],
+            "id": "node-1757807838768",
+            "type": "conversation",
+            "display_position": {
+                "x": 3689.3718639913754,
+                "y": -189.22638395649494
+            },
+            "instruction": {
+                "type": "prompt",
+                "text": "CRITICAL: This node is reached when user agrees to wait for a callback about earlier availability. This is NOT a confirmation of an appointment.\n\nSTEP 1 - CHECK FOR USER QUESTIONS FIRST:\nBefore delivering any closing message, ALWAYS check if the user has asked any questions. Common questions include:\n- About telemedicine/online consultation (\"atende online?\", \"faz telemedicina?\", \"pode ser online?\")\n- About location/address (\"onde é?\", \"qual o endereço?\")\n- About payment (\"como funciona o pagamento?\")\n- About appointment details (\"como é a consulta?\", \"quanto tempo dura?\")\n\nIF USER HAS QUESTIONS:\n1. STOP immediately - Do NOT deliver closing message\n2. Answer the question directly and completely\n   - For telemedicine: \"Sim! {{doctor_name}} atende presencialmente em {{doctor_city}}, mas também faz consultas por telemedicina. Então você pode ser atendido online sem problemas, caso prefira. <break time='400ms'/>\"\n   - Use context from conversation ({{telemedicine}}, {{doctor_city}}, etc.)\n3. After answering, ask if they have more questions: \"Tem mais alguma dúvida?\"\n4. Wait for response - Only proceed to closing after all questions are answered\n\nIF USER HAS NO QUESTIONS:\nDeliver a warm closing message with SPECIFIC timeframe:\n\"Perfeito, {{name}}! Vou tentar conseguir um encaixe antes dessa data e já te retorno pelo WhatsApp entre hoje e amanhã, combinado? \"\n\nWait for response, after user receive user's response, say this\n\nSTEP 2 - Ask if there's anything else:\nAfter user responds to confirmation, ask:\n\"Tem mais alguma coisa que eu possa te ajudar? <break time='400ms'/>\"\n\nWait for user's response.\n\n- IF user says YES or asks a question or needs help:\n  → Answer their question completely and helpfully\n  → After answering, ask again: \"Tem mais alguma coisa que eu possa te ajudar?\"\n  → Continue this loop until user says no or indicates they're done\n  → Then proceed to final closing message\n"
+            }
+        },
+        {
+            "name": "333",
+            "edges": [
+                {
+                    "destination_node_id": "node-1757807838768",
+                    "id": "edge-1758045897572",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User agree this suggestion"
+                    }
+                },
+                {
+                    "destination_node_id": "node-1757798764782",
+                    "id": "edge-1758046179191",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User don't agree this suggestion"
+                    }
+                }
+            ],
+            "id": "node-1758045897572",
+            "type": "conversation",
+            "display_position": {
+                "x": 2406.954558422985,
+                "y": 39.459559497243106
+            },
+            "instruction": {
+                "type": "prompt",
+                "text": "CRITICAL: This node offers to check for availability later. This is NOT a confirmation.\n\nCRITICAL - DO NOT USE THIS NODE FOR POSITIVE RESPONSES:\n- If user says 'bem', 'sim', 'pode', 'ok', 'claro', 'está bom', 'tudo bem', 'perfeito', 'quero', 'aceito' → These are POSITIVE responses meaning AGREEMENT\n- 'Bem' alone or 'Bem,' is a POSITIVE response - user is AGREEING to the date\n- Only use this node for GENUINE hesitation: 'talvez', 'não sei', 'vou pensar', 'deixa eu pensar'\n- If user has already agreed (said 'bem', 'sim', 'pode', etc.), you should NOT be in this node - go to confirmation instead\n\nDeliver: \"Sem problema, {{name}}. Para não perdermos chances, posso deixar tentado o encaixe e, se eu conseguir, te retorno pelo WhatsApp entre hoje e amanhã. Tudo bem assim?\"\n\nIMPORTANT: Wait for user's response. Only proceed to confirmation if user explicitly agrees to proceed with the original date while we also check for alternatives."
+            }
+        },
+        {
+            "name": "Conversation",
+            "edges": [
+                {
+                    "destination_node_id": "node-1764010043469",
+                    "id": "edge-1759438663446",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After user say they don't help anymore."
+                    }
+                }
+            ],
+            "id": "node-1759438663446",
+            "type": "conversation",
+            "display_position": {
+                "x": 2397.464047451555,
+                "y": -1174.7570985190268
+            },
+            "instruction": {
+                "type": "prompt",
+                "text": "CRITICAL: ONLY USE THIS NODE WHEN USER HAS EXPLICITLY AGREED TO A SPECIFIC DATE/SLOT\n\nThis node should ONLY be reached when:\n- User has explicitly agreed to proceed with a consultation on a specific date/time\n- User has said \"pode\", \"sim\", \"quero\",  \"pode confirmar\" in response to a date    offer  \n- User has chosen a specific slot from    the available options      \n     \nDO NOT use this node when: \n- User is asking about alternatives (use  node \"111\" instead) \n- User is expressing concerns or doubts  (use node \"111\" instead)     \n\n- User hasn't explicitly agreed to any date yet\n\nHANDLE SHORT ACKNOWLEDGMENTS:\n- If user says \"Pode\" / \"Sim\" / \"Claro\" / \"Muito obrigado\" → These are YES signals\n- Briefly acknowledge (\"Ótimo!\") and IMMEDIATELY proceed with confirmation\n- Don't wait for more confirmation\n\nSTEP 1 - Confirm appointment:\n\"Ótimo, {{name}}! Seu agendamento já está confirmado. Vou enviar a confirmação pelo WhatsApp agora mesmo, ok?\"\n\nWait for user's response.\n\nSTEP 2 - Ask if there's anything else:\nAfter user responds to confirmation, ask:\n\"Tem mais alguma coisa que eu possa te ajudar? <break time='400ms'/>\"\n\nWait for user's response.\n\n- IF user says YES or asks a question or needs help:\n  → Answer their question completely and helpfully\n  → After answering, ask again: \"Tem mais alguma coisa que eu possa te ajudar?\"\n  → Continue this loop until user says no or indicates they're done\n  → Then proceed to final closing message\n\n\n\nCRITICAL RULES:\n- ALWAYS ask \"Tem mais alguma coisa que eu possa te ajudar?\" after confirming appointment\n- NEVER skip this question\n- NEVER say goodbye without asking this question first\n- Only move to final node after user indicates they don't need anything else"
+            }
+        },
+        {
+            "name": "Extract Variables",
+            "edges": [
+                {
+                    "destination_node_id": "node-1761643340519",
+                    "id": "edge-1761642714360",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After extracting variable"
+                    }
+                }
+            ],
+            "variables": [
+                {
+                    "name": "date",
+                    "description": "The specific date that the user asks for in ISO format (YYYY-MM-DD). IMPORTANT RULES: 1) If the user mentions only a day and month without specifying a year (e.g., 'dia doze de dezembro', '12 de dezembro'), you MUST use the current year ({{current_year}}). 2) If the user asks for 'another date' or 'different date' without specifying which date, and {{suggested_date}} exists, calculate the next day after suggested_date by adding 1 day to it. For example, if suggested_date is '2025-12-12', extract '2025-12-13'. 3) If the user asks for an EARLIER TIME on the SAME DAY (e.g., 'horário mais cedo', 'queria um horário mais cedo'), you MUST extract the SAME DATE that was offered (use {{suggested_date}} or the date from the current offer). Do NOT change the date when user asks for earlier time. 4) Only use a different year if the user explicitly mentions it (e.g., 'dezembro de 2026').",
+                    "type": "string",
+                    "choices": []
+                }
+            ],
+            "id": "node-1761642714360",
+            "type": "extract_dynamic_variables",
+            "display_position": {
+                "x": 2328.2059186245124,
+                "y": -2306.1447023139162
+            }
+        },
+        {
+            "tool_id": "tool-1761643337360",
+            "instruction": {
+                "type": "prompt",
+                "text": "CRITICAL - Use appropriate language based on context:\n- If user asked for a SPECIFIC date (e.g., 'tem no dia 25?', 'e na semana que vem?'): Say \"Deixa eu verificar essa data para você... \"\n- If user asked for ANOTHER date or DIFFERENT date WITHOUT specifying which date (e.g., 'outra data', 'tem outra data?', 'queria ver outras opções'): Say \"Deixa eu verificar outras opções de data para você...\"\n- If the user asks for other available times, you should respond:\n\"Deixe-me verificar os horários disponíveis para você\"\n- Always match your language to what the user actually asked for - do not say \"essa data\" when user asked for \"outra data\" without specifying"
+            },
+            "name": "Check-availability",
+            "edges": [
+                {
+                    "destination_node_id": "node-1761643425313",
+                    "id": "edge-1761643360242",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After receive the response"
+                    }
+                }
+            ],
+            "id": "node-1761643340519",
+            "type": "function",
+            "tool_type": "local",
+            "speak_during_execution": true,
+            "display_position": {
+                "x": 2848.8542546362446,
+                "y": -2319.66412883512
+            },
+            "wait_for_result": true
+        },
+        {
+            "name": "Present_Specific_Date_Result",
+            "edges": [
+                {
+                    "destination_node_id": "node-1759438663446",
+                    "id": "edge-1761643425313",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "user agrees"
+                    }
+                },
+                {
+                    "destination_node_id": "node-1757798419221",
+                    "id": "edge-1761643585064",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "user has concerns"
+                    }
+                },
+                {
+                    "destination_node_id": "node-1761642714360",
+                    "id": "edge-1761643596719",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "user asks about ANOTHER specific date or time"
+                    }
+                },
+                {
+                    "destination_node_id": "node-1757798764782",
+                    "id": "edge-1763828079353-d9ms2628y",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "user don't want to schedule now, and want to end the call"
+                    }
+                }
+            ],
+            "id": "node-1761643425313",
+            "type": "conversation",
+            "display_position": {
+                "x": 3328.837265066934,
+                "y": -2323.302905787215
+            },
+            "instruction": {
+                "type": "prompt",
+                "text": "After check-availability function returns:\n\nCRITICAL - DISTINGUISH BETWEEN EARLIER TIME vs EARLIER DATE vs GENERAL \"OTHER DATE\" REQUEST:\n\n- If user asked for EARLIER TIME on same day (e.g., 'horário mais cedo', 'queria um horário mais cedo'):\n  → Check if {{availableSlots}} contains times EARLIER than the originally offered time\n  → If earlier times are available: \"Ótimo!  Sim, temos horários mais cedo disponíveis: [LIST EARLIER TIMES from availableSlots that are BEFORE the originally offered time]. Qual desses funciona melhor para você?\"\n  → If no earlier times available: \"Hmm, infelizmente não temos horários mais cedo disponíveis nesse dia. Mas temos o horário que eu te ofereci antes [ORIGINAL TIME]. Posso confirmar esse horário para você?\"\n\n- If user asked for a SPECIFIC DIFFERENT DATE (e.g., 'tem no dia 25?', 'e na semana que vem?'):\n  → If available ({{available}} is true):\n    \"Ótimo!  Sim, temos horários disponíveis [TIME_OF_DAY from availableSlots] no dia [DATE]. Posso confirmar esse horário para você?\"\n\n  → If available ({{available}} is true and {{reason}} is weekend):\n    \"Desculpe, {{doctor_name}} não atende pacientes nos fins de semana. Posso verificar outra data para você?\"\n  and wait user response and if user want, confirm the date that the user prefer\n\n  → If NOT available ({{available}} is false):\n    \"Hmm, infelizmente nesse dia específico a agenda já está preenchida. <break time='300ms'/> Mas como eu te mostrei antes, temos disponibilidade em: {{available_slots}}. Algum desses funciona para você?\"\n\n- If user asked for ANOTHER date or DIFFERENT date WITHOUT specifying which date (e.g., 'outra data', 'tem outra data?', 'queria ver outras opções'):\n  → If available ({{available}} is true):\n    \"Ótimo! Encontrei outras opções disponíveis: [LIST availableSlots with dates and times]. Qual dessas funciona melhor para você?\"\n  → If NOT available ({{available}} is false):\n    \"Hmm, infelizmente essa data também não está disponível. Mas como eu te mostrei antes, temos disponibilidade em: {{available_slots}}. Algum desses funciona para você?\"\n  → **NEVER say \"nesse dia específico\" when user did NOT specify a specific day**\n  → **NEVER say \"essa data\" when user asked for \"outra data\" without specifying**\n\nCRITICAL - WAIT FOR USER RESPONSE:\n- After presenting dates/slots, you MUST WAIT for the user's response\n- DO NOT proceed automatically or end the conversation\n- DO NOT transition to any other node until the user explicitly responds\n- If user asks a question, answer it completely before asking again about the dates\n- If user says nothing, wait patiently - do not assume they're done\n- Only proceed when user explicitly:\n  - Agrees to one of the presented slots (\"pode\", \"sim\", \"quero\", chooses a date)\n  - Expresses concerns or objections\n  - Asks about another specific date\n- Always check context: Did user ask for earlier TIME, specific DATE, or general \"other date\"?\n- For earlier time requests, focus on presenting earlier slots from the same day\n- For specific date requests, mention the specific date\n- For general \"other date\" requests, present multiple options without mentioning \"specific day\"\n- If available → push for confirmation immediately\n- If NOT available → offer alternatives or original time\n- Stay positive and solution-oriented\n- Guide toward booking, never away from it"
+            }
+        },
+        {
+            "tool_id": "tool-1757332007477",
+            "instruction": {
+                "type": "static_text",
+                "text": "\"Sem problemas, {{name}}! <break time='300ms'/> Deixa eu verificar outra opção de médico para você... <break time='600ms'/>\""
+            },
+            "name": "Maybe Recommend Doctor",
+            "edges": [
+                {
+                    "destination_node_id": "node-1757296784338",
+                    "id": "edge-1763833363316-hg4ajfw0k",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "{{another_doctor_available}} = \"false\""
+                    }
+                },
+                {
+                    "destination_node_id": "node-present-new-doctor",
+                    "id": "edge-1763833366403-2s8ta16eu",
+                    "transition_condition": {
+                        "type": "equation",
+                        "equations": [
+                            {
+                                "left": "{{another_doctor_available}}",
+                                "operator": "==",
+                                "right": "true"
+                            }
+                        ],
+                        "operator": "||"
+                    }
+                }
+            ],
+            "id": "node-recommend-another-doctor",
+            "type": "function",
+            "tool_type": "local",
+            "speak_during_execution": true,
+            "display_position": {
+                "x": 4491.492614022659,
+                "y": -1607.920349024692
+            },
+            "wait_for_result": true
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Otimo! Encontrei outro médico para você. Gostaria que eu lhe mostrasse mais detalhes sobre ele?"
+            },
+            "model_choice": {
+                "type": "cascading",
+                "model": "gpt-4.1",
+                "high_priority": true
+            },
+            "name": "Present New Doctor",
+            "edges": [
+                {
+                    "destination_node_id": "node-1757296784338",
+                    "id": "edge-new-doctor-liked",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After receive user's response"
+                    }
+                },
+                {
+                    "destination_node_id": "node-1765111202258",
+                    "id": "edge-1765115311460-mnwvqsy55",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "If user want to another doctors again"
+                    }
+                }
+            ],
+            "id": "node-present-new-doctor",
+            "knowledge_base_ids": [],
+            "type": "conversation",
+            "display_position": {
+                "x": 4988.426711515247,
+                "y": -1613.4218875603883
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "  \"Perfeito! Vou enviar os detalhes da confirmação pelo WhatsApp agora mesmo. <break time='400ms'/> Obrigado(a) pelo seu tempo, {{name}}. Em nome do(a) Dr(a). {{doctor_name}}, será um prazer recebê-lo(a) para a consulta. Até breve!\""
+            },
+            "name": "Conversation",
+            "edges": [
+                {
+                    "id": "edge-1764010043469-txinwc4em",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "Describe the transition condition"
+                    }
+                }
+            ],
+            "id": "node-1764010043469",
+            "type": "conversation",
+            "display_position": {
+                "x": 4211.1554141018605,
+                "y": 523.1360631554104
+            },
+            "skip_response_edge": {
+                "destination_node_id": "node-1757330614671",
+                "id": "edge-1764010109581",
+                "transition_condition": {
+                    "type": "prompt",
+                    "prompt": "Skip response"
+                }
+            }
+        },
+        {
+            "tool_id": "tool-1757295373150",
+            "name": "Check-identity",
+            "edges": [
+                {
+                    "destination_node_id": "node-1757362744711",
+                    "id": "edge-1764560462799-avw3wa5ff",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "skip"
+                    }
+                }
+            ],
+            "id": "node-1764560442358",
+            "type": "function",
+            "tool_type": "local",
+            "speak_during_execution": false,
+            "display_position": {
+                "x": 1023.7520007508513,
+                "y": 1210.019089850617
+            },
+            "wait_for_result": true
+        },
+        {
+            "name": "Logic Split Node",
+            "edges": [
+                {
+                    "destination_node_id": "node-1757798419221",
+                    "id": "edge-1765111002649-bzdhnsogb",
+                    "transition_condition": {
+                        "type": "equation",
+                        "equations": [
+                            {
+                                "left": "{{script_style}",
+                                "operator": "==",
+                                "right": "copy"
+                            }
+                        ],
+                        "operator": "||"
+                    }
+                }
+            ],
+            "id": "node-1765110986786",
+            "else_edge": {
+                "destination_node_id": "node-1761642714360",
+                "id": "edge-1765110986786-h4m4nkz03",
+                "transition_condition": {
+                    "type": "prompt",
+                    "prompt": "Else"
+                }
+            },
+            "type": "branch",
+            "display_position": {
+                "x": 1874.9758232827553,
+                "y": -330.66316818262595
+            }
+        },
+        {
+            "name": "Conversation",
+            "edges": [
+                {
+                    "destination_node_id": "node-1765115354419",
+                    "id": "edge-1765111202258-ffr6nujnt",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "If there are available doctors that have specialty what user want"
+                    }
+                },
+                {
+                    "destination_node_id": "node-1757296784338",
+                    "id": "edge-1765115225139-z6iues14l",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After explain there are no available doctors that don't have specialty what user want"
+                    }
+                }
+            ],
+            "id": "node-1765111202258",
+            "type": "conversation",
+            "display_position": {
+                "x": 3387.6547141520678,
+                "y": -995.0291883748869
+            },
+            "instruction": {
+                "type": "prompt",
+                "text": "WHEN USER ASKS ABOUT OTHER DOCTORS.\n\nAVAILABLE OTHER Specialty:\n{{other_services}}\n\nFirst, determine the medical specialty of the doctor the user is looking for. \nIf there are no doctors who have a specialty what the user want, explain there is no that specialty kindly.\nAfter that, move to the origin Authority_Scarcity node.\n\nIf there is speciatly what user want, \nupdate {{prefer_specialty}} to specialty what the user want. and then move to next node."
+            }
+        },
+        {
+            "name": "Extract Variables",
+            "edges": [
+                {
+                    "destination_node_id": "node-recommend-another-doctor",
+                    "id": "edge-1765115354419-fo91uqsv9",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After extract prefer_specialty variable"
+                    }
+                }
+            ],
+            "variables": [
+                {
+                    "name": "prefer_specialty",
+                    "description": "the specialty that user want, if user want the same specialty, set this value to \"{{specialty}}\".\nvalue must be specialty that is in {{other_services}}",
+                    "type": "string",
+                    "choices": []
+                }
+            ],
+            "id": "node-1765115354419",
+            "type": "extract_dynamic_variables",
+            "display_position": {
+                "x": 4020.310534677917,
+                "y": -1198.531427401801
+            }
+        }
+    ],
+    "components": [
+        {
+            "name": "Component L1",
+            "start_node_id": "conversation-1763205406846",
+            "conversation_flow_component_id": "cf-component-1763205406845",
+            "nodes": [
+                {
+                    "name": "Conversation",
+                    "edges": [],
+                    "id": "conversation-1763205406846",
+                    "type": "conversation",
+                    "display_position": {
+                        "x": 200,
+                        "y": 100
+                    },
+                    "instruction": {
+                        "type": "prompt",
+                        "text": "Describe what the AI should say or do"
+                    }
+                },
+                {
+                    "name": "Exit Component",
+                    "id": "component-end-1763205406846",
+                    "type": "end",
+                    "display_position": {
+                        "x": 600,
+                        "y": 100
+                    },
+                    "instruction": {
+                        "type": "static_text",
+                        "text": "Component completed"
+                    }
+                }
+            ],
+            "user_modified_timestamp": 1763205406846,
+            "tools": []
+        }
+    ],
+    "start_node_id": "node-1757535785664",
+    "start_speaker": "user",
+    "tools": [
+        {
+            "headers": {},
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "lead_id": "{{lead_id}}",
+                "mismatched_reason": "{{mismatched_reason}}"
+            },
+            "description": "",
+            "type": "custom",
+            "url": "https://app.aluri.ai/api/retell/check-identity",
+            "tool_id": "tool-1757295373150",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "Check-identity",
+            "response_variables": {},
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "lead_id": {
+                        "type": "string",
+                        "description": ""
+                    },
+                    "mismatched_reason": {
+                        "type": "string",
+                        "description": ""
+                    }
+                }
+            }
+        },
+        {
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "specialty": "{{prefer_specialty}}",
+                "agent_id": "{{agent_id}}",
+                "city": "{{city}}",
+                "need": "{{need}}",
+                "owner_id": "{{owner_id}}",
+                "exclude_doctor_id": "{{doctor_id}}",
+                "lead_id": "{{lead_id}}"
+            },
+            "description": "",
+            "type": "custom",
+            "url": "https://app.aluri.ai/retell/recommend_doctor",
+            "tool_id": "tool-1757332007477",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "Maybe_recommend_doctor",
+            "response_variables": {
+                "doctor_specialty": "agent_variables.doctor_specialty",
+                "doctor_tags": "agent_variables.doctor.tags",
+                "available_slots": "agent_variables.available_slots",
+                "cancellation_policy_days": "agent_variables.cancellation_policy_days",
+                "doctor_bio": "agent_variables.doctor_bio",
+                "another_doctor_available": "another_doctor_available",
+                "doctor_address": "agent_variables.doctor_address",
+                "consultation_price": "agent_variables.consultation_price",
+                "suggested_date": "agent_variables.suggested_date",
+                "telemedicine_available": "agent_variables.telemedicine_available",
+                "other_services": "agent_variables.other_services",
+                "return_policy_days": "agent_variables.return_policy_days",
+                "doctor_id": "agent_variables.doctor.id",
+                "payment_methods": "agent_variables.payment_methods",
+                "script_availability": "agent_variables.script_availability",
+                "return_policy": "agent_variables.return_policy",
+                "doctor_city": "agent_variables.doctor_city",
+                "consultation_duration": "agent_variables.consultation_duration",
+                "return_consultation_price": "agent_variables.return_consultation_price",
+                "doctor_name": "agent_variables.doctor_name"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "args": {
+                        "type": "object",
+                        "description": "",
+                        "properties": {
+                            "specialty": {
+                                "type": "string",
+                                "description": "{{prefer_specialty}}"
+                            },
+                            "agent_id": {
+                                "type": "string",
+                                "description": "{{agent_id}}"
+                            },
+                            "need": {
+                                "type": "string",
+                                "description": "{{need}}"
+                            },
+                            "city": {
+                                "type": "string",
+                                "description": "{{city}}"
+                            },
+                            "owner_id": {
+                                "type": "string",
+                                "description": "{{owner_id}}"
+                            },
+                            "exclude_doctor_id": {
+                                "type": "string",
+                                "description": "{{doctor_id}}"
+                            },
+                            "lead_id": {
+                                "type": "string",
+                                "description": "{{lead_id}}"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "headers": {},
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "description": "Consulta com {{doctor_name}} ({{doctor_specialty}})",
+                "lead_id": "{{lead_id}}",
+                "amount": "{{consultation_price}}"
+            },
+            "description": "",
+            "type": "custom",
+            "url": "https://app.aluri.ai/fn/create-payment-link",
+            "tool_id": "tool-1757365061137",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "Create_payment_link",
+            "response_variables": {
+                "url": "url"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "description": {
+                        "type": "string",
+                        "description": ""
+                    },
+                    "lead_id": {
+                        "type": "string",
+                        "description": ""
+                    },
+                    "amount": {
+                        "type": "string",
+                        "description": ""
+                    }
+                }
+            }
+        },
+        {
+            "headers": {},
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "lead_id": "{{lead_id}}",
+                "preferred_channel": "{{preferred_channel}}"
+            },
+            "description": "",
+            "type": "custom",
+            "url": "https://app.aluri.ai/api/fn/set-communication-preference",
+            "tool_id": "tool-1757365620921",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "Save_preference",
+            "response_variables": {
+                "ok": "ok"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "description": {
+                        "type": "string",
+                        "description": ""
+                    },
+                    "lead_id": {
+                        "type": "string",
+                        "description": ""
+                    },
+                    "preferred_channel": {
+                        "type": "string",
+                        "description": ""
+                    }
+                }
+            }
+        },
+        {
+            "headers": {},
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "when_iso": "{{when_time_iso}}",
+                "lead_id": "{{lead_id}}"
+            },
+            "description": "",
+            "type": "custom",
+            "url": "https://app.aluri.ai/fn/schedule-call",
+            "tool_id": "tool-1757416342856",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "Schedule_call",
+            "response_variables": {
+                "schedule_status": "ok"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "args": {
+                        "type": "object",
+                        "description": "",
+                        "properties": {
+                            "when_time_iso": {
+                                "type": "string",
+                                "description": ""
+                            },
+                            "lead_id": {
+                                "type": "string",
+                                "description": ""
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "headers": {
+                "url": "payment_url",
+                "to": "{{phone}}"
+            },
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {},
+            "description": "",
+            "type": "custom",
+            "url": "https://app.aluri.ai/fn/send-payment-link",
+            "tool_id": "tool-1757418989577",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "Send_link_WA",
+            "response_variables": {},
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": ""
+                    },
+                    "to": {
+                        "type": "string",
+                        "description": ""
+                    }
+                }
+            }
+        },
+        {
+            "headers": {
+                "url": "{{payment_url}}",
+                "to": "{{phone}}"
+            },
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {},
+            "description": "",
+            "type": "custom",
+            "url": "https://app.aluri.ai/api/fn/send-payment-link",
+            "tool_id": "tool-1757419062296",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "Send_link_SMS",
+            "response_variables": {},
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": ""
+                    },
+                    "to": {
+                        "type": "string",
+                        "description": ""
+                    }
+                }
+            }
+        },
+        {
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "date": "{{date}}",
+                "lead_id": "{{lead_id}}"
+            },
+            "description": "",
+            "type": "custom",
+            "url": "https://app.aluri.ai/retell/check-availability",
+            "tool_id": "tool-1761643337360",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "check-availability",
+            "response_variables": {
+                "available": "available",
+                "reason": "reason",
+                "availableSlots": "availableSlots",
+                "timezone": "timezone"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "args": {
+                        "type": "object",
+                        "description": "",
+                        "properties": {
+                            "date": {
+                                "type": "string",
+                                "description": "{{date}}"
+                            },
+                            "lead_id": {
+                                "type": "string",
+                                "description": "{{lead_id}}"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "specialty": "{{requested_specialty}}",
+                "lead_id": "{{lead_id}}"
+            },
+            "description": "",
+            "type": "custom",
+            "url": "https://app.aluri.ai/api/fn/check-specialty",
+            "tool_id": "tool-check-specialty-001",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "Check-specialty",
+            "response_variables": {
+                "available": "available",
+                "ok": "ok"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "args": {
+                        "type": "object",
+                        "description": "",
+                        "properties": {
+                            "specialty": {
+                                "type": "string",
+                                "description": "{{requested_specialty}}"
+                            },
+                            "lead_id": {
+                                "type": "string",
+                                "description": "{{lead_id}}"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ],
+    "model_choice": {
+        "type": "cascading",
+        "model": "gpt-5.1",
+        "high_priority": false
+    },
+    "model_temperature": 0.02,
+    "tool_call_strict_mode": false,
+    "knowledge_base_ids": [],
+    "kb_config": {
+        "top_k": 3,
+        "filter_score": 0.6
+    },
+    "begin_tag_display_position": {
+        "x": -133.09621416225406,
+        "y": 41.529930686396256
+    },
+    "is_published": false,
+    "mcps": []
+}

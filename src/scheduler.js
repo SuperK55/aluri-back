@@ -1,0 +1,750 @@
+import cron from 'node-cron';
+import { supa } from './lib/supabase.js';
+import { agentManager } from './services/agentManager.js';
+import { log } from './config/logger.js';
+import { twilio } from './lib/twilio.js';
+import { getNowInSaoPaulo, isWithinBusinessHours, getIsoStringNow, getDateStringInTimezone, getDayOfWeekInTimezone, normalizeDateString } from './utils/timezone.js';
+import { whatsappBusinessService } from './services/whatsappBusiness.js';
+import { normalizePhoneNumber } from './lib/retell.js';
+
+
+async function canRetryNow(leadId, minGapHours = 2) {
+  const { data: lastAttempt } = await supa
+    .from('call_attempts')
+    .select('started_at')
+    .eq('lead_id', leadId)
+    .order('started_at', { ascending: false })
+    .limit(1);
+  
+  if (!lastAttempt?.[0]?.started_at) {
+    return true;
+  }
+  
+  const lastAttemptTime = new Date(lastAttempt[0].started_at);
+  const now = getNowInSaoPaulo();
+  const hoursSinceLastAttempt = (now - lastAttemptTime) / (1000 * 60 * 60);
+  
+  return hoursSinceLastAttempt >= minGapHours;
+}
+
+async function isLeadAlreadyBeingProcessed(leadId) {
+  const { data: existingCall } = await supa
+    .from('call_attempts')
+    .select('id')
+    .eq('lead_id', leadId)
+    .eq('outcome', 'initiated')
+    .is('ended_at', null)
+    .limit(1);
+  
+  return existingCall && existingCall.length > 0;
+}
+
+/**
+ * Find available slots before a given date for a resource (doctor or treatment)
+ * Returns up to maxSlots slots formatted for WhatsApp template
+ */
+async function findEarlierAvailableSlots(resourceId, resourceType, ownerId, beforeDate, maxSlots = 2) {
+  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const timezoneOffsetMap = {
+    'America/Sao_Paulo': '-03:00',
+    'America/Rio_Branco': '-05:00',
+    'America/Manaus': '-04:00',
+    'America/Fortaleza': '-03:00',
+    'America/Recife': '-03:00',
+    'America/Bahia': '-03:00'
+  };
+  
+  let workingHours = {};
+  let dateSpecificAvailability = [];
+  let timezone = 'America/Sao_Paulo';
+  let consultationDuration = 90;
+  
+  // Get resource configuration
+  if (resourceType === 'doctor') {
+    const { data: doctor } = await supa
+      .from('doctors')
+      .select('working_hours, date_specific_availability, consultation_duration, timezone')
+      .eq('id', resourceId)
+      .single();
+    
+    if (doctor) {
+      workingHours = doctor.working_hours || {};
+      dateSpecificAvailability = doctor.date_specific_availability || [];
+      timezone = doctor.timezone || 'America/Sao_Paulo';
+      consultationDuration = doctor.consultation_duration || 90;
+    }
+  } else if (resourceType === 'treatment') {
+    // Get treatment duration
+    const { data: treatment } = await supa
+      .from('treatments')
+      .select('session_duration')
+      .eq('id', resourceId)
+      .single();
+    
+    // Get owner's working hours
+    const { data: owner } = await supa
+      .from('users')
+      .select('working_hours, date_specific_availability, timezone')
+      .eq('id', ownerId)
+      .single();
+    
+    if (owner) {
+      workingHours = owner.working_hours || {};
+      dateSpecificAvailability = owner.date_specific_availability || [];
+      timezone = owner.timezone || 'America/Sao_Paulo';
+    }
+    if (treatment) {
+      consultationDuration = treatment.session_duration || 60;
+    }
+  }
+  
+  const offset = timezoneOffsetMap[timezone] || '-03:00';
+  const availableSlots = [];
+  
+  // Parse beforeDate - the date the user mentioned they want earlier than
+  let targetDate;
+  if (beforeDate && /^\d{4}-\d{2}-\d{2}$/.test(beforeDate)) {
+    targetDate = new Date(beforeDate + `T12:00:00${offset}`);
+  } else {
+    // If no valid date, use 7 days from now as the "before" date
+    targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + 7);
+  }
+  
+  // Start from tomorrow
+  const today = new Date(new Date().toLocaleString('en-US', { timeZone: timezone }));
+  const startDate = new Date(today);
+  startDate.setDate(startDate.getDate() + 1);
+  
+  // Search up to 14 days before the target date
+  let currentDate = new Date(startDate);
+  const maxDaysToSearch = 14;
+  let daysSearched = 0;
+  
+  while (availableSlots.length < maxSlots && daysSearched < maxDaysToSearch && currentDate < targetDate) {
+    const dateString = getDateStringInTimezone(currentDate, timezone);
+    const dayName = dayNames[getDayOfWeekInTimezone(currentDate, timezone)];
+    const daySchedule = workingHours[dayName];
+    
+    // Check for override availability
+    const overrideAvailability = dateSpecificAvailability.find(item => {
+      if (item.type !== 'available' || !item.date) return false;
+      const normalizedStoredDate = normalizeDateString(item.date);
+      return normalizedStoredDate === dateString;
+    });
+    
+    // Check if date is unavailable
+    const isUnavailable = dateSpecificAvailability.some(item => {
+      if (item.type !== 'unavailable' || !item.date) return false;
+      const normalizedStoredDate = normalizeDateString(item.date);
+      return normalizedStoredDate === dateString;
+    });
+    
+    const effectiveSchedule = overrideAvailability?.timeSlots?.length
+      ? { enabled: true, timeSlots: overrideAvailability.timeSlots }
+      : daySchedule;
+    
+    const canUseSchedule = !isUnavailable && effectiveSchedule && effectiveSchedule.enabled && effectiveSchedule.timeSlots;
+    
+    if (canUseSchedule) {
+      // Get existing appointments for this date
+      const startOfDay = new Date(dateString + `T00:00:00${offset}`);
+      const endOfDay = new Date(dateString + `T23:59:59${offset}`);
+      
+      let appointmentsQuery = supa
+        .from('appointments')
+        .select('start_at, end_at')
+        .gte('start_at', startOfDay.toISOString())
+        .lte('start_at', endOfDay.toISOString())
+        .eq('status', 'scheduled');
+      
+      if (resourceType === 'doctor') {
+        appointmentsQuery = appointmentsQuery.eq('resource_type', 'doctor').eq('resource_id', resourceId);
+      } else if (resourceType === 'treatment') {
+        appointmentsQuery = appointmentsQuery.eq('resource_type', 'treatment').eq('resource_id', resourceId);
+      }
+      
+      const { data: appointments } = await appointmentsQuery;
+      const busySlots = appointments || [];
+      
+      // Find available slots on this day
+      for (const slot of effectiveSchedule.timeSlots) {
+        if (availableSlots.length >= maxSlots) break;
+        
+        const [hours, minutes] = (slot.start || '09:00').split(':');
+        const slotStartTime = new Date(dateString + `T${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}:00${offset}`);
+        const slotEndTime = new Date(slotStartTime);
+        slotEndTime.setMinutes(slotEndTime.getMinutes() + consultationDuration);
+        
+        // Skip if slot is in the past
+        if (slotStartTime <= today) continue;
+        
+        // Check for conflicts
+        const hasConflict = busySlots.some(appointment => {
+          const appointmentStart = new Date(appointment.start_at);
+          const appointmentEnd = new Date(appointment.end_at);
+          return (slotStartTime < appointmentEnd && slotEndTime > appointmentStart);
+        });
+        
+        if (!hasConflict) {
+          // Format: "13/11/2025 às 10:00"
+          const day = String(currentDate.getDate()).padStart(2, '0');
+          const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+          const year = currentDate.getFullYear();
+          const formattedSlot = `${day}/${month}/${year} às ${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
+          
+          availableSlots.push({
+            date: dateString,
+            time: `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`,
+            formatted: formattedSlot
+          });
+        }
+      }
+    }
+    
+    // Move to next day
+    currentDate.setDate(currentDate.getDate() + 1);
+    daysSearched++;
+  }
+  
+  return availableSlots;
+}
+
+cron.schedule('*/10 * * * *', async () => {
+  try {
+    const nowIso = getIsoStringNow();
+    
+    if (!isWithinBusinessHours()) {
+      return;
+    }
+    
+    const { data: leads, error } = await supa
+      .from('leads')
+      .select('*')
+      .lte('next_retry_at', nowIso)
+      .in('status', ['no_answer', 'reschedule', 'call_failed'])
+      .not('assigned_agent_id', 'is', null);
+    
+    if (error) {
+      log.error('Error querying leads for retry:', error.message);
+      return;
+    }
+    
+    if (!leads || leads.length === 0) {
+      return;
+    }
+    
+    
+    for (const lead of leads) {
+      try {
+        // Check if lead is already being processed
+        if (await isLeadAlreadyBeingProcessed(lead.id)) {
+          log.info(`Lead ${lead.id} already has an active call attempt, skipping`);
+          continue;
+        }
+        
+        // Get current attempt count
+        const { data: attempts } = await supa
+          .from('call_attempts')
+          .select('attempt_no, started_at')
+          .eq('lead_id', lead.id)
+          .order('attempt_no', { ascending: false })
+          .limit(1);
+        
+        const lastAttemptNo = attempts?.[0]?.attempt_no || 0;
+        const nextAttemptNo = lastAttemptNo + 1;
+        
+        // Check max attempts
+        if (nextAttemptNo > (lead.max_attempts || 3)) {
+          log.info(`Lead ${lead.id} has reached max attempts (${lead.max_attempts || 3}), switching to WhatsApp`);
+          await supa
+            .from('leads')
+            .update({ 
+              status: 'whatsapp_outreach', 
+              preferred_channel: 'whatsapp',
+              next_retry_at: null 
+            })
+            .eq('id', lead.id);
+          continue;
+        }
+        
+        // Check if enough time has passed since last attempt
+        if (!(await canRetryNow(lead.id, 2))) {
+          log.info(`Lead ${lead.id} - not enough time passed since last attempt, skipping`);
+          continue;
+        }
+        
+        // Ensure lead has an assigned agent
+        if (!lead.assigned_agent_id) {
+          log.info(`Lead ${lead.id} has no assigned agent, attempting to assign...`);
+          try {
+            const assignment = await agentManager.findDoctorAndAgentForLead(lead);
+            const updatedLead = await agentManager.assignDoctorAndAgentToLead(
+              lead.id,
+              assignment.doctor,
+              assignment.agent
+            );
+            lead.assigned_agent_id = assignment.agent.id;
+            lead.assigned_doctor_id = assignment.doctor.id;
+            lead.agent_variables = updatedLead.agent_variables;
+            log.info(`Lead ${lead.id} assigned to agent ${assignment.agent.id}`);
+          } catch (assignmentError) {
+            log.error(`Failed to assign doctor/agent for lead ${lead.id}:`, assignmentError.message);
+            continue;
+          }
+        }
+        
+        // Make the retry call
+        const callResponse = await agentManager.makeOutboundCall(lead);
+        
+        // Record the call attempt
+        const now = getIsoStringNow();
+        await supa.from('call_attempts').insert({
+          lead_id: lead.id,
+          agent_id: lead.assigned_agent_id,
+          resource_type: lead.assigned_resource_type,
+          resource_id: lead.assigned_resource_id,
+          owner_id: lead.owner_id,
+          direction: 'outbound',
+          attempt_no: nextAttemptNo,
+          scheduled_at: now,
+          started_at: now,
+          retell_call_id: callResponse.call_id,
+          outcome: 'initiated'
+        });
+        
+        // Update lead status
+        await supa.from('leads')
+          .update({ 
+            status: 'calling', 
+            next_retry_at: null 
+          })
+          .eq('id', lead.id);
+        
+        log.info(`Retry call initiated for lead ${lead.id}: ${callResponse.call_id}`);
+        
+      } catch (leadError) {
+        log.error(`Error processing retry for lead ${lead.id}:`, leadError.message);
+        
+        // Update lead status to indicate retry failure
+        const retryTime = new Date(getNowInSaoPaulo().getTime() + 30 * 60 * 1000);
+        await supa
+          .from('leads')
+          .update({ 
+            status: 'retry_failed',
+            next_retry_at: retryTime.toISOString() // Retry in 30 minutes
+          })
+          .eq('id', lead.id);
+      }
+    }
+    
+    log.info('Retry scheduler check completed');
+    
+  } catch (error) {
+    log.error('Retry scheduler error:', error.message);
+  }
+});
+
+// Scheduler for "whatsapp_outreach" leads - Max call attempts reached, send initial greeting
+cron.schedule('5 * * * *', async () => {
+  try {
+    if (!isWithinBusinessHours()) {
+      return;
+    }
+    
+  const { data: leads, error } = await supa
+    .from('leads')
+    .select('*')
+    .eq('status', 'whatsapp_outreach');
+
+    if (error) return log.error('whatsapp_outreach scheduler query error:', error.message);
+    if (!leads || leads.length === 0) return;
+    
+    log.info(`Processing ${leads.length} leads for whatsapp_outreach`);
+
+    for (const lead of leads) {
+      try {
+        const ownerId = lead.owner_id;
+        if (!ownerId) {
+          log.warn('Lead has no owner_id, skipping WhatsApp outreach:', { leadId: lead.id });
+          continue;
+        }
+        
+        const toPhone = lead.whatsapp || lead.phone;
+        if (!toPhone) {
+          log.warn('Lead has no phone number, skipping:', { leadId: lead.id });
+          continue;
+        }
+        
+        const normalizedPhone = normalizePhoneNumber(toPhone);
+        const firstName = String(lead.name || '').split(' ')[0] || 'Cliente';
+        
+        // Get chat agent for this owner
+        const resourceType = lead.assigned_resource_type || 'doctor';
+        const chatAgent = await agentManager.getChatAgentForOwner(
+          ownerId, 
+          resourceType === 'treatment' ? 'beauty' : 'medical'
+        );
+        
+        // Get owner info
+        const { data: ownerData } = await supa
+          .from('users')
+          .select('name, business_name, whatsapp_phone_number')
+          .eq('id', ownerId)
+          .single();
+        
+        // Check if owner has WhatsApp Business connected
+        if (!ownerData?.whatsapp_phone_number) {
+          log.warn('Owner has no WhatsApp Business connected, falling back to Twilio:', { ownerId });
+          // Fallback to Twilio
+          const twilioTo = lead.whatsapp || (String(lead.phone || '').startsWith('whatsapp:') ? lead.phone : `whatsapp:${lead.phone}`);
+      await twilio.messages.create({
+            to: twilioTo,
+        messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID,
+            body: `Olá ${firstName}! Tentamos falar por telefone. Você prefere continuar por *ligação* ou *WhatsApp*? Responda "ligar" ou "WhatsApp".`
+      });
+      await supa
+        .from('leads')
+        .update({ status: 'waiting_preference' })
+        .eq('id', lead.id);
+          continue;
+        }
+        
+        if (!chatAgent) {
+          log.warn('No chat agent found for owner, skipping:', { ownerId, leadId: lead.id });
+          continue;
+        }
+        
+        // Send initial_welcome template
+        const templateResult = await whatsappBusinessService.sendTemplateMessage(
+          ownerId,
+          normalizedPhone,
+          'initial_welcome',
+          'pt_BR',
+          [
+            {
+              type: 'body',
+              parameters: [
+                { type: 'text', text: firstName },
+                { type: 'text', text: chatAgent.agent_name || 'Assistente' },
+                { type: 'text', text: ownerData?.business_name || 'Clínica' }
+              ]
+            }
+          ]
+        );
+        
+        // Create whatsapp_chats record
+        const chatMetadata = {
+          chat_type: 'welcome',
+          initiated_by: 'scheduler_whatsapp_outreach',
+          resource_type: resourceType,
+          resource_id: lead.assigned_resource_id
+        };
+        
+        const { data: newChat, error: chatError } = await supa
+          .from('whatsapp_chats')
+          .insert({
+            owner_id: ownerId,
+            lead_id: lead.id,
+            wa_phone: normalizedPhone,
+            agent_id: chatAgent.id,
+            status: 'pending_response',
+            metadata: chatMetadata,
+            agent_variables: {
+              ...(lead.agent_variables || {}),
+              name: firstName,
+              client_name: lead.name,
+              business_name: ownerData?.business_name || 'Clínica',
+              agent_name: chatAgent.agent_name || 'Assistente'
+            },
+            last_message_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+        
+        if (!chatError && newChat) {
+          await supa
+            .from('whatsapp_messages')
+            .insert({
+              chat_id: newChat.id,
+              direction: 'outbound',
+              sender: 'system',
+              wa_message_id: templateResult?.messageId || null,
+              body: `Template: initial_welcome - ${firstName}, ${chatAgent.agent_name || 'Assistente'}, ${ownerData?.business_name || 'Clínica'}`,
+              message_type: 'template',
+              is_template: true
+            });
+          
+          log.info('WhatsApp initial contact greeting sent (scheduler):', {
+            leadId: lead.id,
+            chatId: newChat.id,
+            phone: normalizedPhone
+          });
+        }
+        
+        // Update lead status
+        await supa
+          .from('leads')
+          .update({ status: 'whatsapp_outreach_sent' })
+          .eq('id', lead.id);
+        
+      } catch (leadError) {
+        log.error('Error processing whatsapp_outreach lead:', {
+          leadId: lead.id,
+          error: leadError.message
+        });
+    }
+  }
+  } catch (error) {
+    log.error('whatsapp_outreach scheduler error:', error.message);
+  }
+});
+
+// Scheduler for "available_time" leads - User wants earlier date (scarity method)
+// Agent said: "Vou te retornar pelo WhatsApp entre hoje e amanhã"
+cron.schedule('5 * * * *', async () => {
+  try {
+    const nowIso = getIsoStringNow();
+    
+    if (!isWithinBusinessHours()) {
+      return;
+    }
+    
+  const { data: leads, error } = await supa
+    .from('leads')
+    .select('*')
+      .eq('status', 'available_time')
+      .lte('next_retry_at', nowIso);
+
+    if (error) return log.error('available_time scheduler query error:', error.message);
+    if (!leads || leads.length === 0) return;
+    
+    log.info(`Processing ${leads.length} leads for available_time WhatsApp outreach`);
+
+    for (const lead of leads) {
+      try {
+        const ownerId = lead.owner_id;
+        if (!ownerId) {
+          log.warn('Lead has no owner_id, skipping WhatsApp outreach:', { leadId: lead.id });
+          continue;
+        }
+        
+        // Get the phone number
+        const toPhone = lead.whatsapp || lead.phone;
+        if (!toPhone) {
+          log.warn('Lead has no phone number, skipping:', { leadId: lead.id });
+          continue;
+        }
+        
+        const normalizedPhone = normalizePhoneNumber(toPhone);
+        const firstName = String(lead.name || '').split(' ')[0] || 'Cliente';
+        
+        // Get resource info (doctor or treatment)
+        const resourceType = lead.assigned_resource_type || 'doctor';
+        const resourceId = lead.assigned_resource_id;
+        let resourceName = 'nossa equipe';
+        
+        if (resourceId) {
+          if (resourceType === 'doctor') {
+            const { data: doctor } = await supa
+              .from('doctors')
+              .select('name')
+              .eq('id', resourceId)
+              .single();
+            if (doctor) resourceName = doctor.name;
+          } else if (resourceType === 'treatment') {
+            const { data: treatment } = await supa
+              .from('treatments')
+              .select('name')
+              .eq('id', resourceId)
+              .single();
+            if (treatment) resourceName = treatment.name;
+          }
+        }
+        
+        // Get chat agent for this owner
+        const chatAgent = await agentManager.getChatAgentForOwner(ownerId, resourceType === 'treatment' ? 'beauty' : 'medical');
+        if (!chatAgent) {
+          log.warn('No chat agent found for owner, skipping:', { ownerId, leadId: lead.id });
+          continue;
+        }
+        
+        // Get user/owner info for agent variables
+        const { data: ownerData } = await supa
+          .from('users')
+          .select('name, business_name, whatsapp_phone_number')
+          .eq('id', ownerId)
+          .single();
+        
+        // Check if owner has WhatsApp Business connected
+        if (!ownerData?.whatsapp_phone_number) {
+          log.warn('Owner has no WhatsApp Business connected, falling back to Twilio:', { ownerId });
+          // Fallback to Twilio for owners without WhatsApp Business
+          const twilioTo = lead.whatsapp || (String(lead.phone || '').startsWith('whatsapp:') ? lead.phone : `whatsapp:${lead.phone}`);
+      await twilio.messages.create({
+            to: twilioTo,
+        messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID,
+            body: `Olá ${firstName}! Aqui é da clínica. Temos horários disponíveis para você. Qual horário seria melhor?`
+      });
+      await supa
+        .from('leads')
+        .update({ status: 'waiting_preference' })
+        .eq('id', lead.id);
+          continue;
+        }
+        
+        // Get the suggested date from agent_variables (stored during call)
+        const agentVariables = lead.agent_variables || {};
+        const suggestedDate = agentVariables.suggested_date || null;
+        
+        // Find REAL available slots BEFORE the suggested date
+        const earlierSlots = await findEarlierAvailableSlots(
+          resourceId,
+          resourceType,
+          ownerId,
+          suggestedDate,
+          2 // We need 2 slots for the template
+        );
+        
+        if (earlierSlots.length < 2) {
+          log.info('Not enough earlier slots found, skipping WhatsApp outreach:', {
+            leadId: lead.id,
+            suggestedDate,
+            slotsFound: earlierSlots.length
+          });
+          // Mark as processed but no slots available
+          await supa
+            .from('leads')
+            .update({ 
+              status: 'no_earlier_slots',
+              next_retry_at: null 
+            })
+            .eq('id', lead.id);
+          continue;
+        }
+        
+        // Format suggested date for display (DD/MM/YYYY)
+        let formattedSuggestedDate = 'a data mencionada';
+        if (suggestedDate && /^\d{4}-\d{2}-\d{2}$/.test(suggestedDate)) {
+          const [year, month, day] = suggestedDate.split('-');
+          formattedSuggestedDate = `${day}/${month}/${year}`;
+        }
+        
+        // Send WhatsApp template: earlier_appointment_offer
+        // Template: "Olá {{1}}! 😊\nAqui é a {{2}} da clínica {{3}}.\nConseguimos horários antes do dia {{4}}:\n\n👉 {{5}}\n👉 {{6}}\n\nAlgum desses funciona para você?"
+        const templateResult = await whatsappBusinessService.sendTemplateMessage(
+          ownerId,
+          normalizedPhone,
+          'earlier_appointment_offer', // Template name
+          'pt_BR',
+          [
+            {
+              type: 'body',
+              parameters: [
+                { type: 'text', text: firstName },                           // {{1}} - Client name
+                { type: 'text', text: chatAgent.agent_name || 'Assistente' }, // {{2}} - Agent name
+                { type: 'text', text: ownerData?.business_name || 'Clínica' }, // {{3}} - Clinic name
+                { type: 'text', text: formattedSuggestedDate },               // {{4}} - Date user mentioned
+                { type: 'text', text: earlierSlots[0].formatted },            // {{5}} - First available slot
+                { type: 'text', text: earlierSlots[1].formatted }             // {{6}} - Second available slot
+              ]
+            }
+          ]
+        );
+        
+        // Create whatsapp_chats record with real available slots
+        const chatMetadata = {
+          chat_type: 'real_available_time',
+          suggested_date: suggestedDate,
+          offered_slots: earlierSlots, // Store the actual slots offered
+          resource_type: resourceType,
+          resource_id: resourceId,
+          resource_name: resourceName,
+          initiated_by: 'scheduler_scarity'
+        };
+        
+        // Format available slots for agent context
+        const availableSlotsText = earlierSlots.map(s => s.formatted).join('\n');
+        
+        const { data: newChat, error: chatError } = await supa
+          .from('whatsapp_chats')
+          .insert({
+            owner_id: ownerId,
+            lead_id: lead.id,
+            wa_phone: normalizedPhone,
+            agent_id: chatAgent.id,
+            status: 'pending_response', // Waiting for user to reply
+            metadata: chatMetadata,
+            agent_variables: {
+              ...agentVariables,
+              name: firstName,
+              client_name: lead.name,
+              resource_name: resourceName,
+              resource_type: resourceType,
+              business_name: ownerData?.business_name || 'Clínica',
+              agent_name: chatAgent.agent_name || 'Assistente',
+              suggested_date: formattedSuggestedDate,
+              available_slots: availableSlotsText,
+              slot_1: earlierSlots[0]?.formatted || '',
+              slot_1_date: earlierSlots[0]?.date || '',
+              slot_1_time: earlierSlots[0]?.time || '',
+              slot_2: earlierSlots[1]?.formatted || '',
+              slot_2_date: earlierSlots[1]?.date || '',
+              slot_2_time: earlierSlots[1]?.time || ''
+            },
+            last_message_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+        
+        if (chatError) {
+          log.error('Error creating whatsapp_chats record:', chatError);
+        } else {
+          // Store the outbound template message
+          await supa
+            .from('whatsapp_messages')
+            .insert({
+              chat_id: newChat.id,
+              direction: 'outbound',
+              sender: 'system',
+              wa_message_id: templateResult?.messageId || null,
+              body: `Template: earlier_appointment_offer - ${firstName}, ${chatAgent.agent_name || 'Assistente'}, ${ownerData?.business_name || 'Clínica'}, ${formattedSuggestedDate}, ${earlierSlots[0].formatted}, ${earlierSlots[1].formatted}`,
+              message_type: 'template',
+              is_template: true,
+              payload: {
+                template_name: 'earlier_appointment_offer',
+                slots_offered: earlierSlots
+              }
+            });
+          
+          log.info('WhatsApp earlier slot offer sent successfully:', {
+            leadId: lead.id,
+            chatId: newChat.id,
+            phone: normalizedPhone,
+            suggestedDate: formattedSuggestedDate,
+            slotsOffered: earlierSlots.map(s => s.formatted)
+          });
+        }
+        
+        // Update lead status
+        await supa
+          .from('leads')
+          .update({ 
+            status: 'whatsapp_scarity_sent',
+            next_retry_at: null 
+          })
+          .eq('id', lead.id);
+        
+      } catch (leadError) {
+        log.error('Error processing available_time lead:', {
+          leadId: lead.id,
+          error: leadError.message
+        });
+      }
+    }
+    
+  } catch (error) {
+    log.error('available_time scheduler error:', error.message);
+  }
+});
+

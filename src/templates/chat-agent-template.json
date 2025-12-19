@@ -1,0 +1,157 @@
+{
+    "channel": "chat",
+    "agent_name": "{{agent_name}}",
+    "response_engine": {
+      "type": "conversation-flow",
+      "version": 0,
+      "conversation_flow_id": "{{conversation_flow_id}}"
+    },
+    "webhook_url": "https://app.aluri.ai/retell/webhook",
+    "language": "pt-BR",
+    "data_storage_setting": "everything",
+    "opt_in_signed_url": false,
+    "post_call_analysis_data": [
+        {
+            "type": "boolean",
+            "name": "interested_in_appointment",
+            "description": "User's interest level in scheduling appointment"
+          },
+          {
+            "type": "boolean",
+            "name": "agreement_appointment",
+            "description": "User's agreement to our appointment: (yes, no)"
+          },
+          {
+            "type": "boolean",
+            "name": "should_send_confirmation",
+            "description": "Whether we should send appointment confirmation message to the client through whatsapp: (yes, no)"
+          },
+          {
+            "type": "string",
+            "name": "appointment_date",
+            "description": "Confirmed appointment date in ISO format (e.g., 2025-10-31)"
+          },
+          {
+            "type": "string",
+            "name": "appointment_time",
+            "description": "Confirmed appointment time in 24-hour format (e.g., 14:00)"
+          },
+          {
+            "type": "string",
+            "name": "preferred_appointment_time",
+            "description": "User's preferred appointment time: morning or afternoon (e.g., morning, afternoon)"
+          },
+          {
+            "type": "boolean",
+            "name": "should_contact_again",
+            "description": "Whether the agent should contact user again via WhatsApp: (yes, no)"
+          },
+          {
+            "type": "string",
+            "name": "contact_again_reason",
+            "description": "Reason for contacting again: (available_time, user_requested_callback, user_busy, other)"
+          },
+          {
+            "type": "boolean",
+            "name": "user_requested_alternative_date",
+            "description": "Whether user asked for alternative dates or different dates than what was offered: (yes, no)"
+          },
+          {
+            "type": "string",
+            "name": "alternative_date_requested",
+            "description": "Specific alternative date requested by user in ISO format (e.g., 2025-12-01). Empty if user didn't specify exact date but asked for alternatives"
+          },
+          {
+            "type": "string",
+            "name": "alternative_date_preference",
+            "description": "User's preference description for alternative dates if they didn't specify exact date (e.g., 'after December 1st', 'before specific date', 'next week', 'earlier than offered'). Empty if exact date was specified"
+          },
+          {
+            "type": "string",
+            "name": "chat_type",
+            "description": "Type of chat conversation: welcome, appointment_confirm, real_available_time"
+          },
+          {
+            "type": "string",
+            "name": "conversation_summary",
+            "description": "Brief summary of the conversation and key outcomes"
+          }
+    ],
+    "version": 0,
+    "is_published": false,
+    "post_call_analysis_model": "gpt-4.1",
+    "pii_config": {
+      "mode": "post_call",
+      "categories": []
+    },
+    "analysis_successful_prompt": "Evaluate whether the agent seems to have a successful chat with the user, where the agent finishes the task, and the chat was complete without being cutoff.",
+    "analysis_summary_prompt": "Write a 1-3 sentence summary of the chat based on the messages. Should capture the important information and actions taken during the chat.",
+    "post_chat_analysis_data": [
+        {
+            "type": "boolean",
+            "name": "interested_in_appointment",
+            "description": "User's interest level in scheduling appointment"
+          },
+          {
+            "type": "boolean",
+            "name": "agreement_appointment",
+            "description": "User's agreement to our appointment: (yes, no)"
+          },
+          {
+            "type": "boolean",
+            "name": "should_send_confirmation",
+            "description": "Whether we should send appointment confirmation message to the client through whatsapp: (yes, no)"
+          },
+          {
+            "type": "string",
+            "name": "appointment_date",
+            "description": "Confirmed appointment date in ISO format (e.g., 2025-10-31)"
+          },
+          {
+            "type": "string",
+            "name": "appointment_time",
+            "description": "Confirmed appointment time in 24-hour format (e.g., 14:00)"
+          },
+          {
+            "type": "string",
+            "name": "preferred_appointment_time",
+            "description": "User's preferred appointment time: morning or afternoon (e.g., morning, afternoon)"
+          },
+          {
+            "type": "boolean",
+            "name": "should_contact_again",
+            "description": "Whether the agent should contact user again via WhatsApp: (yes, no)"
+          },
+          {
+            "type": "string",
+            "name": "contact_again_reason",
+            "description": "Reason for contacting again: (available_time, user_requested_callback, user_busy, other)"
+          },
+          {
+            "type": "boolean",
+            "name": "user_requested_alternative_date",
+            "description": "Whether user asked for alternative dates or different dates than what was offered: (yes, no)"
+          },
+          {
+            "type": "string",
+            "name": "alternative_date_requested",
+            "description": "Specific alternative date requested by user in ISO format (e.g., 2025-12-01). Empty if user didn't specify exact date but asked for alternatives"
+          },
+          {
+            "type": "string",
+            "name": "alternative_date_preference",
+            "description": "User's preference description for alternative dates if they didn't specify exact date (e.g., 'after December 1st', 'before specific date', 'next week', 'earlier than offered'). Empty if exact date was specified"
+          },
+          {
+            "type": "string",
+            "name": "chat_type",
+            "description": "Type of chat conversation: welcome, appointment_confirm, real_available_time"
+          },
+          {
+            "type": "string",
+            "name": "conversation_summary",
+            "description": "Brief summary of the conversation and key outcomes"
+          }
+    ],
+    "post_chat_analysis_model": "gpt-4.1"
+  }

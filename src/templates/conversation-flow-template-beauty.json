@@ -1,0 +1,686 @@
+{
+    "global_prompt": "Your name is {{agent_name}}. You're ENERGETIC, WARM, and genuinely EXCITED to help! Use an upbeat, friendly tone that makes people smile.\n\n## Objective:\nConfirm identity, understand skin concerns, suggest the ideal treatment, explain service details and conclude the consultation politely and naturally.\n\n## Style Principles\n- Be ENERGETIC: Sound genuinely happy and enthusiastic (but not over the top)\n- Be concise: Keep answers to less than two sentences, unless explaining complex topics.\n- Present the treatment's benefits only once. Never repeat it in any case. If needed, simply answer.\n- Don't be too tied to the script. Be more natural and fluid.\n- Use SSML for pacing (<break time='500ms'/>, slower speech, emphasis).\n- Be conversational: Use natural language, contractions, and acknowledge what the speaker is saying.\n- Be empathetic: Demonstrate understanding of the client's concerns about their appearance.\n- CRITICAL: If you have already presented treatment details/benefits once, NEVER repeat them again. If user asks questions, answer directly without re-explaining the treatment.\n- CRITICAL: If user shows signs of wanting to end the call (says goodbye, mentions being in a hurry, etc.), respect their time and conclude politely without repeating information.\n- CRITICAL: Always acknowledge what the user says before transitioning to a new topic. Never ignore their questions or comments.\n- CRITICAL: Use natural transitions between topics. Avoid abrupt jumps without context.\n- CRITICAL: When interrupted mid-sentence, acknowledge the interruption warmly, answer their question, THEN complete what you were saying before (especially if it was important info like price).\n\n## Handling Short User Comments (CRITICAL)\n- Recognize non-interruptive acknowledgments: When user says short phrases like:\n  • \"Isso mesmo\" / \"That's right\"\n  • \"Claro\" / \"Sure\" / \"Of course\"\n  • \"Tá\" / \"OK\" / \"Alright\"\n  • \"Entendi\" / \"Got it\"\n  • \"Pode ser\" / \"Sounds good\"\n- DO NOT STOP - These are signals to CONTINUE, not to wait\n- Briefly acknowledge with energy: Use \"Perfeito!\", \"Ótimo!\", \"Isso aí!\" (NOT \"Legal\" - avoid this word)\n- Immediately continue with your next point\n- Only pause for substantive responses - questions, objections, or detailed comments\n\n## Handling Interruptions (CRITICAL)\n- When user interrupts with a question (e.g., asking about duration while you're explaining price):\n  1. Stop immediately and acknowledge warmly: \"Imagina, sem problemas!\"\n  2. Answer their specific question completely\n  3. THEN return to complete what you were saying: \"E voltando ao que eu estava falando, o valor da sessão é...\"\n- Track what information you haven't finished delivering** and make sure to complete it\n- Never leave important information (like price) unfinished\n\n## Smart Response to Repeat Questions\n- Track what you've already explained in this conversation\n- If user asks the same question again (e.g., price), give a DIFFERENT response:\n  • First time asking price: Full explanation (price + payment + duration)\n  • Second time asking price: ONLY the price OR price + new value statement\n    \"O valor da sessão é {{treatment_price}}.\" (just price)\n    \"O valor é {{treatment_price}} — as clientes costumam dizer que vale muito a pena pelo resultado.\" (price + new angle)\n    NEVER repeat the same full explanation again\n- If user asks about discount: Don't repeat price explanation, just address discount\n- Keep responses fresh - add new information or perspectives on repeat questions\n\n## Conversation Flow Guidelines\n- Always respond to user's questions before proceeding\n- Use acknowledgment phrases: \"Entendi\", \"Perfeito\", \"Que bom saber\"\n- Bridge topics naturally: \"Com base no que você me contou...\", \"Então, deixe eu te explicar...\"\n- Wait for SUBSTANTIVE user responses - don't wait after short acknowledgments\n- Be genuinely interested in their responses\n- NEVER repeat questions or topics already covered\n- NEVER repeat the same information twice - always add new angles\n\n## Ending Calls (CRITICAL - AVOID LOOPING)\n- Say goodbye ONCE and ONLY ONCE - never repeat closing message\n- Recognize end-of-call signals: \"Obrigado\", \"Muito obrigado\", \"Está bom\", \"OK\", \"Valeu\", \"Tchau\", \"Até logo\", \"Tá bom\"\n- When user says these phrases after you've said goodbye, DO NOT repeat your goodbye - transition immediately to end call\n- If you've already said \"Obrigado pelo seu tempo\" or similar closing, DO NOT say it again\n- After delivering final confirmation/closing message, end the conversation cleanly without repeating\n\n## Response Guidelines\nReturn dates in spoken format: Say \"dezessete de setembro\" and not \"17/09\" and Say \"Dezessete de setembro de dois mil e vinte e cinco\" and not \"17/09/2025\"\nAsk one question at a time: Avoid overwhelming the other person with multiple questions.\n\nConfirm understanding: Paraphrase important information for the client.\nWhen speaking the last phone number, transform the format as follows:\n- For example 9132 should be pronounced as: \"nove um três dois\"\n\n## STRONG SALES LOGIC:\n- ALWAYS push for treatment booking regardless of concern severity\n- If concerns seem minor - emphasize self-care, confidence boost, and professional expertise\n- NEVER offer to \"wait\" or suggest postponing - always recommend booking now\n- Use social proof and expertise to create urgency even for minor concerns\n\nRules:\n• Speak in a calm and positive tone, using short sentences, and confirm understanding.\n• If the client interrupts with a substantive comment, stop and respond.\n• If the client makes a short acknowledgment (\"OK\", \"Claro\", \"Tá\"), briefly acknowledge and continue immediately.\n• Never make up facts; Use only variables and functions. Context (if available):\n– Name: {{name}}, Last WhatsApp message: {{phone_last4}}\n– City: {{city}}, Interest: {{specialty}}\n- Business/Professional Info: Clinic Name: {{business_name}}, Social Proof: {{social_proof}}\n– Suggested treatment: {{treatment_name}}. Treatment benefits: {{treatment_benefit}}. Session duration: {{session_duration}}. Recommended sessions: {{recommended_sessions}}. Interval: {{interval_between_sessions}}. Price: {{treatment_price}}, Offer_type: {{offer_type}}  single_session_price: {{single_session_price}}  package_sessions_count: {{package_sessions_count\n}} package_price: {{package_price}} \n",
+    "nodes": [
+        {
+            "tool_id": "tool-1757295373150",
+            "name": "Check-identity",
+            "edges": [
+                {
+                    "destination_node_id": "node-1757362744711",
+                    "id": "edge-1764642055244-8bwzauaib",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After receive response"
+                    }
+                }
+            ],
+            "id": "node-1757295380230",
+            "type": "function",
+            "tool_type": "local",
+            "speak_during_execution": false,
+            "display_position": {
+                "x": 971.0690396774412,
+                "y": 1140.4574776670158
+            },
+            "wait_for_result": true
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Natural Flow Instructions:\n\nFirst acknowledge what the user shared with WARMTH and EMPATHY:\n\"Entendi, {{name}}! <break time='400ms'/>\" (use enthusiastic tone, not tired)\n\nCRITICAL - AVOID DUPLICATE QUESTIONS:\n- Track what you've already asked in this conversation\n- If user mentions they already answered something, apologize warmly and move forward\n- Don't repeat questions about the same topic (skin concern, impact on confidence, duration)\n\nAfter getting their skin concerns, ask ONLY ONE follow-up with genuine interest:\nChoose ONE of these (don't ask multiple):\n- Duration: \"Há quanto tempo isso te incomoda?\"\n- OR Impact: \"Como isso está afetando sua confiança no dia a dia?\"\n- OR Frequency: \"Isso te incomoda sempre ou em situações específicas?\"\n- OR Desire: \"Você tem algum resultado específico em mente que gostaria de alcançar?\"\n\n**Then transition directly to treatment presentation - DON'T ask more discovery questions**\n\nUse natural, energetic transitions:\n- \"Perfeito! Deixa eu te contar sobre o tratamento ideal para você.\" (natural and warm)\n- \"Deixe eu te explicar como funciona\" (too abrupt and formal)\n\nUse SSML for pacing (<break time='500ms'/>, slower speech, emphasis).\n\nCRITICAL: Always acknowledge what the user said with ENERGY before transitioning to next topic. Sound genuinely interested and helpful, not tired or robotic."
+            },
+            "model_choice": {
+                "type": "cascading",
+                "model": "gpt-4.1",
+                "high_priority": false
+            },
+            "name": "Discovery_Concerns",
+            "edges": [
+                {
+                    "destination_node_id": "node-1761636628956",
+                    "id": "edge-1757298321223",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After confirm what user's skin concerns and desired results"
+                    }
+                }
+            ],
+            "id": "node-1757298321223",
+            "knowledge_base_ids": [],
+            "type": "conversation",
+            "display_position": {
+                "x": 761.8221296320052,
+                "y": -127.8663503725539
+            }
+        },
+        {
+            "name": "Goodbye_end",
+            "id": "node-1757330614671",
+            "type": "end",
+            "display_position": {
+                "x": 4499.600982616837,
+                "y": 919.0071699729239
+            },
+            "speak_during_execution": false
+        },
+        {
+            "name": "mismatched_reason",
+            "edges": [
+                {
+                    "destination_node_id": "node-1757295380230",
+                    "id": "edge-1757358405416",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After extracting variables"
+                    }
+                }
+            ],
+            "variables": [
+                {
+                    "name": "mismatched_reason",
+                    "description": "Extract reason why the info is not correct",
+                    "type": "string",
+                    "choices": []
+                },
+                {
+                    "name": "lead_id",
+                    "description": "current {{lead_id}}",
+                    "type": "string",
+                    "choices": []
+                }
+            ],
+            "id": "node-1757358405416",
+            "type": "extract_dynamic_variables",
+            "display_position": {
+                "x": 561.6940643382528,
+                "y": 1147.9488502812906
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Parece que houve um desencontro de dados. Vou registrar como *lead divergente* para nossa equipe revisar.\nObrigado(a) e tenha um bom dia!"
+            },
+            "name": "Data_Mismatch_End",
+            "edges": [
+                {
+                    "id": "edge-1757362744711",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "Goodbye_end(Ending)"
+                    }
+                }
+            ],
+            "id": "node-1757362744711",
+            "type": "conversation",
+            "display_position": {
+                "x": 1345.9128259796685,
+                "y": 1136.3360856047539
+            },
+            "skip_response_edge": {
+                "destination_node_id": "node-1757330614671",
+                "id": "edge-1757417266249",
+                "transition_condition": {
+                    "type": "prompt",
+                    "prompt": "Skip response"
+                }
+            }
+        },
+        {
+            "finetune_conversation_examples": [],
+            "instruction": {
+                "type": "prompt",
+                "text": "Always deliver the script step by step, never all at once.\nUse an ENERGETIC, WARM, and genuinely HAPPY tone - sound like someone who LOVES their job!\nAfter each sentence, pause ONLY for substantive responses.\nUse SSML for pacing (<break time='500ms'/>, slower speech, emphasis).\n\nCRITICAL: Be conversational and natural. If user asks how you are, respond warmly before continuing.\n\nHANDLING SHORT ACKNOWLEDGMENTS: When user says \"Isso mesmo\", \"Claro\", \"Tá\", \"OK\" → Briefly acknowledge with \"Perfeito!\" or \"Ótimo!\" (NEVER use \"Legal\") and IMMEDIATELY CONTINUE. Don't pause.\n\nFlow:\n\n1. Saudação calorosa e energética:\n\"Olá {{name}}! Aqui é a {{agent_name}}, assistente da Clínica de {{business_name}}. Como você está hoje?\"\n→ Stop and wait for user's answer.\n→ If user asks how you are: Respond with genuine enthusiasm like \"Estou super bem, obrigada por perguntar! <break time='300ms'/>\" before continuing.\n→ If user just greets back (\"Tudo bem\", \"Oi\"): Immediately continue to step 2 with positive energy.\n\n2. Contextualização (use natural transition with warmth):\n\"Que ótimo! Fico muito feliz em saber disso! <break time='400ms'/> Então, {{name}}, recebemos sua mensagem demonstrando interesse em saber mais sobre {{treatment_name}}. <break time='500ms'/> Está correto?\"\n→ Stop and wait for user's answer.\n→ **If user says \"Isso mesmo\" or \"Sim\"**: Respond with \"Perfeito!\" or \"Ótimo!\" and immediately continue to step 3.\n\n3. Convite para conversa (energético e acolhedor):\n\"Me conta, o que mais te incomoda hoje na sua pele? Tem algo especifico?\"\n→ Stop and WAIT - this requires a substantive answer.\n→ When user explains: Listen actively and acknowledge with warmth.\n\n4. Confirmação de informações:\n\"{{treatment_name}} é um dos nossos tratamentos mais populares — muitas pessoas fazem para {{treatment_benefit}}.\nAntes da gente continuar, você poderia, por gentileza, me confirmar seus dados? Seu nome é {{name}} e o final do seu celular é {{phone_last4}}, certo?\"\n→ Stop and wait for confirmation.\n→ If user confirms (\"Isso mesmo\", \"Certo\", \"Sim\"): Transition to Discovery immediately.\n\nImportant:\n- Do not read the whole script in one go.\n- Give the user a chance to answer substantive questions.\n- Don't pause after short acknowledgments - continue immediately.\n- Keep a natural, patient rhythm (5% slower pace).\n- ALWAYS acknowledge and respond to user's questions or comments before continuing.\n- Recognize the difference:\n  • Substantive responses (concerns, questions) → PAUSE and address\n  • Short acknowledgments (\"OK\", \"Sim\", \"Claro\") → CONTINUE immediately\n- Be genuinely conversational, not robotic."
+            },
+            "name": "Greeting_Identity",
+            "edges": [
+                {
+                    "destination_node_id": "node-1757298321223",
+                    "id": "edge-1757535785664",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "O usuário confirma que o nome e o número do WhatsApp estão corretos\n(ex: você está certo. Isso mesmo. OK. etc.)"
+                    }
+                },
+                {
+                    "destination_node_id": "node-1757358405416",
+                    "id": "edge-1757536029417",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "O usuário diz que não está correto.\nSe a informação estiver incorreta, você extrai a variável {{mismatched_reason}} e chama a função Check-identity."
+                    }
+                }
+            ],
+            "id": "node-1757535785664",
+            "type": "conversation",
+            "display_position": {
+                "x": 155.72342763662806,
+                "y": 34.89505762466654
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "Sem problemas, eu entendo perfeitamente. Estaremos disponíveis a qualquer momento caso mude de ideia no futuro. Te desejo um ótimo dia!"
+            },
+            "name": "Polite_Decline_End",
+            "edges": [
+                {
+                    "destination_node_id": "node-1757330614671",
+                    "id": "edge-1757798764782",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After delivering message, user acknowledges with 'obrigado', 'ok', 'está bom', 'tchau', 'valeu', or any end-of-call signal, OR agent finishes speaking"
+                    }
+                }
+            ],
+            "id": "node-1757798764782",
+            "type": "conversation",
+            "display_position": {
+                "x": 2940.1909400954933,
+                "y": 528.268198043201
+            },
+            "skip_response_edge": {
+                "destination_node_id": "node-1757330614671",
+                "id": "edge-1757798764783",
+                "transition_condition": {
+                    "type": "prompt",
+                    "prompt": "Skip response"
+                }
+            }
+        },
+        {
+            "name": "Confirm_Booking_End",
+            "edges": [
+                {
+                    "destination_node_id": "node-1764642342722",
+                    "id": "edge-1757807838768",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After user say they don't need help anymore"
+                    }
+                }
+            ],
+            "id": "node-1757807838768",
+            "type": "conversation",
+            "display_position": {
+                "x": 3546.0184968926847,
+                "y": 383.7144781844338
+            },
+            "instruction": {
+                "type": "prompt",
+                "text": "CRITICAL: This node is reached when user agrees to wait for a callback about earlier availability. This is NOT a confirmation of an appointment.\n\nSTEP 1 - CHECK FOR USER QUESTIONS FIRST:\nBefore delivering any closing message, ALWAYS check if the user has asked any questions. Common questions include:\n- About treatment details (\"como funciona?\", \"quanto tempo dura?\")\n- About payment (\"como funciona o pagamento?\")\n- About location/address (\"onde é?\", \"qual o endereço?\")\n\nIF USER HAS QUESTIONS:\n1. STOP immediately - Do NOT deliver closing message\n2. Answer the question directly and completely\n3. After answering, ask if they have more questions: \"Tem mais alguma dúvida?\"\n4. Wait for response - Only proceed to closing after all questions are answered\n\nIF USER HAS NO QUESTIONS:\nStep 1 - Confirm\n\"Perfeito, {{name}}! Vou tentar conseguir um encaixe antes dessa data e já te retorno pelo WhatsApp entre hoje e amanhã, combinado? \"\n\nAfter receive user's response\n\n**Step 2 - Offer Additional Help:**\nAfter user responds to \"ok?\", ask:\n\"Posso ajudar com mais alguma coisa?\"\n\n**CRITICAL - WAIT FOR USER RESPONSE AGAIN:**\n- After asking if you can help with anything else, you MUST WAIT for the user's response\n- Do NOT end the conversation until user responds\n- User may respond with: \"não\", \"não precisa\", \"está tudo certo\", \"não, obrigado\", \"tudo bem\", or they may ask a question\n\nCRITICAL RULES:\n- ALWAYS include the SPECIFIC timeframe \"entre hoje e amanhã\" in the closing message\n- NEVER ignore user questions or interrupt them\n- ALWAYS answer questions before closing\n- Listen for questions like \"tira uma dúvida\", \"pergunta\", \"quero saber\"\n- If user says \"não me entendeu\" or \"você não entendeu\", stop immediately and address what they're asking"
+            }
+        },
+        {
+            "name": "Final_Confirmation",
+            "edges": [
+                {
+                    "destination_node_id": "node-1764642342722",
+                    "id": "edge-1759438663446",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After user say they don't need help anymore"
+                    }
+                }
+            ],
+            "id": "node-1759438663446",
+            "type": "conversation",
+            "display_position": {
+                "x": 2420.4252297495923,
+                "y": -1067.9205740111495
+            },
+            "instruction": {
+                "type": "prompt",
+                "text": "**CRITICAL - PROPER CLOSING SEQUENCE (MUST FOLLOW ALL STEPS):**\n\n**Step 1 - Confirm Appointment WITH DATE AND TIME:**\nCRITICAL - Always include the specific date and time when confirming:\n- If a specific date and time were agreed upon (from {{availableSlots}}, {{suggested_date}}, {{date}}, or {{available_slots}}), you MUST mention them explicitly\n- Format: \"Ótimo, {{name}}! Seu agendamento está confirmado para [DATE] às [TIME]. Vou enviar a confirmação pelo WhatsApp agora mesmo, ok?\"\n- If the date/time was mentioned earlier in the conversation, reference it: \"Ótimo, {{name}}! Seu agendamento está confirmado para [the date and time we discussed]. Vou enviar a confirmação pelo WhatsApp agora mesmo, ok?\"\n- NEVER confirm an appointment without mentioning the specific date and time\n\n**CRITICAL - WAIT FOR USER RESPONSE:**\n- After asking \"ok?\", you MUST WAIT for the user's response\n- Do NOT continue or end the conversation until user responds\n- User may respond with: \"ok\", \"sim\", \"pode\", \"tá bom\", \"perfeito\", \"combinado\", or similar\n\n**Step 2 - Offer Additional Help:**\nAfter user responds to \"ok?\", ask:\n\"Posso ajudar com mais alguma coisa?\"\n\n**CRITICAL - WAIT FOR USER RESPONSE AGAIN:**\n- After asking if you can help with anything else, you MUST WAIT for the user's response\n- Do NOT end the conversation until user responds\n- User may respond with: \"não\", \"não precisa\", \"está tudo certo\", \"não, obrigado\", \"tudo bem\", or they may ask a question\n\n**CRITICAL RULES:**\n- NEVER skip any step in this sequence\n- ALWAYS wait for user response after each question\n- Do NOT combine steps or deliver all messages at once"
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "**IMPORTANT**: This node should present treatment benefits ONLY ONCE per conversation. If you have already presented the treatment details, DO NOT repeat them.\n\n**CRITICAL SALES LOGIC**: ALWAYS push for booking regardless of concern severity. Even if concerns seem minor, emphasize self-care, confidence boost, and professional expertise.\n\n**IF THIS IS THE FIRST TIME presenting the treatment:**\n\n**Step 1 - Natural Transition:**\n\"Perfeito! Baseado no que você me contou, o tratamento ideal para você é {{treatment_name}}. <break time='400ms'/>\"\n\n**Step 2 - Treatment Benefits (present naturally):**\nApresente os benefícios e diferencial do tratamento em um tom profissional, mas acolhedor. Fale devagar (5% mais devagar), com ênfase nos resultados e experiência.\n\"{{treatment_name}} é um dos tratamentos mais procurados aqui — muitas pessoas fazem para {{treatment_benefit}}. <break time='400ms'/> Ele proporciona {{treatment_effects}} e deixa sua pele com aquele aspecto {{treatment_result}}. <break time='500ms'/>\"\n\n**Step 3 -Client feedback:**\nCRITICAL - Use gender-neutral language: When presenting client feedback, say \"Nossos clientes sempre dizem: {{client_feedback}}\" or \"Os clientes da clínica costumam relatar: {{client_feedback}}\". NEVER use \"nossas clientes\" (feminine form) - always use \"nossos clientes\" (gender-neutral/masculine form) or \"os clientes da clínica\" to be inclusive of all genders.\n\n**When user responds positively** (\"Isso mesmo\", \"Parece bom\", \"Claro\"):\n- Briefly acknowledge with ENERGY: \"Perfeito!\" or \"Ótimo!\" or \"Isso aí!\" (NEVER use \"Legal\")\n- **IMMEDIATELY CONTINUE** to Step 4 without waiting\n\n**Step 4 - How the treatment works:**\n\"Então, deixa eu te explicar rapidinho como funciona... <break time='400ms'/>\"\nForneça uma explicação clara e profissional do processo do tratamento.\nUse um tom tranquilizador, confiante e ANIMADO.\n\n**DELIVER ALL INFO IN CLEAR CHUNKS:**\nChunk 1 - Duration & Sessions:\n\"O tratamento leva cerca de {{session_duration}}, é bem relaxante, e você já percebe os resultados logo de cara. <break time='400ms'/> O ideal é fazer {{recommended_sessions}} sessões com um intervalo de {{interval_between_sessions}}. <break time='400ms'/>\"\n\n**IF USER INTERRUPTS HERE** (asking about duration or anything):\n- Answer their question warmly and completely\n- THEN say: \"E sobre o investimento, o valor hoje é {{single_session_price}} por sessão. {{payment_methods}}\"\n\n**IF NO INTERRUPTION, CONTINUE:**\nChunk 2 - Price & Payment:\n\"E sobre o investimento, o valor hoje é {{single_session_price\n}} por sessão, e você pode pagar {{payment_methods}}. <break time='400ms'/>\"\n\n**If package available:**\n\"{{package_offer}} <break time='400ms'/>\"\n\n**When user says short acknowledgments** (\"Claro\", \"Tá\", \"OK\"):\n- **DO NOT PAUSE** - these mean \"continue\"\n- Respond with \"Perfeito!\" or \"Ótimo!\" (NOT \"Legal\")\n- Proceed immediately to Step 5\n\n**Step 5 - Availability:**\n\"{{script_availability}}\"\n\n\n**CRITICAL - WAIT FOR USER RESPONSE AFTER PRESENTING AVAILABILITY:**\n- After presenting dates/slots, you MUST WAIT for the user's response\n- DO NOT proceed automatically or end the conversation\n- DO NOT transition to any other node until the user explicitly responds\n- If user asks a question, answer it completely before asking again about the dates\n- If user says nothing, wait patiently - do not assume they're done\n- Only proceed when user explicitly agrees, asks about another date, expresses concerns, or declines\n\n**HANDLING REPEAT QUESTIONS (CRITICAL):**\n\n**If user asks about PRICE again:**\n- **First time**: Full explanation (already given in Step 4)\n- **Second time**: Choose ONE of these approaches:\n   OPTION A: \"O valor da sessão é {{single_session_price\n}}.\" (just price, nothing else)\n   OPTION B: \"O valor é {{single_session_price\n}} — nossos clientes costumam dizer que vale muito a pena pelo resultado.\" (price + new value angle - use \"nossos clientes\" NOT \"as clientes\")\n   NEVER repeat payment methods, duration, or sessions again\n\n============\nWHEN USER ASKS ABOUT OTHER SERVICES/SPECIALTIES/TREATMENTS:\n\nCRITICAL RULES:\n- We can only make ONE appointment per call\n- Inform user about other available services, but do NOT make a second appointment in this call\n- If user wants to book the other service, direct them to WhatsApp\n- Use {{other_services}} variable to inform about available options\n- This can happen at ANY point during the conversation (before, during, or after treatment presentation)\n\nAVAILABLE OTHER SERVICES:\n{{other_services}}\n\nIF USER ASKS ABOUT A SPECIFIC SERVICE AND WE HAVE IT:\n\"Ótimo! <break time='300ms'/> Sim, temos na nossa clínica! <break time='400ms'/> Você também pode agendar para esse serviço. <break time='400ms'/>\"\n\nThen wait for user's response.\n\nIF USER ASKS WHAT OTHER SERVICES WE HAVE:\n\"Claro! <break time='300ms'/> Além do serviço atual, também oferecemos: {{other_services}}. <break time='400ms'/> Você tem interesse em algum desses?\"\n\nThen wait for user's response.\n\nIF USER WANTS TO MAKE APPOINTMENT FOR ANOTHER SERVICE:\n\"Entendo, {{name}}! <break time='300ms'/> Eu não consigo fazer dois agendamentos na mesma ligação, mas você pode nos chamar no WhatsApp para iniciar um novo agendamento. <break time='400ms'/> Por enquanto, vamos finalizar o agendamento atual?\"\n\nAfter delivering this message, wait for user's response. Then continue with current appointment flow.\n\nIF USER DOES NOT WANT TO MAKE APPOINTMENT NOW:\nAcknowledge warmly: \"Perfeito! Qualquer coisa, pode nos chamar. <break time='300ms'/> Vamos continuar com o seu agendamento?\"\n\nThen continue with current appointment flow.\n\nIF ASKED SERVICE IS NOT AVAILABLE (not in {{other_services}}):\n\"Hmm, infelizmente não oferecemos esse serviço na nossa clínica no momento. <break time='400ms'/> Mas temos: {{other_services}}. <break time='300ms'/> Algum desses te interessa?\"\n\nThen wait for response and continue with current appointment flow.\n\nUse SSML para ritmo (<break time='500ms'/>, fala mais lenta, ênfase)."
+            },
+            "model_choice": {
+                "type": "cascading",
+                "model": "gpt-4.1",
+                "high_priority": true
+            },
+            "name": "Treatment_With_Availability",
+            "edges": [
+                {
+                    "destination_node_id": "node-1759438663446",
+                    "id": "edge-1761636628956-6f0mbcnsb",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User agrees to one of the available slots. User is READY TO BOOK NOW. CRITICAL: 'Bem' alone or 'Bem,' followed by pause is a POSITIVE response - treat as agreement, NOT indecision."
+                    }
+                },
+                {
+                    "destination_node_id": "node-1761642714360",
+                    "id": "edge-1761636628956-3umfco0yf",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks about availability on a SPECIFIC date that was NOT in the presented slots (e.g., 'Tem no dia 25?', 'E na semana que vem?')"
+                    }
+                },
+                {
+                    "destination_node_id": "node-1761642714360",
+                    "id": "edge-1761636628956-earlier-time",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks for an EARLIER TIME on the SAME DAY. User wants a different TIME slot on the same day, NOT a different date."
+                    }
+                },
+                {
+                    "destination_node_id": "node-1757798764782",
+                    "id": "edge-1761639965908",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User clearly declines ('não quero', 'não tenho interesse', 'não vou fazer')"
+                    }
+                }
+            ],
+            "id": "node-1761636628956",
+            "knowledge_base_ids": [],
+            "type": "conversation",
+            "display_position": {
+                "x": 1474.769660260818,
+                "y": -338.6717548242411
+            }
+        },
+        {
+            "name": "Extract Variables",
+            "edges": [
+                {
+                    "destination_node_id": "node-1761643340519",
+                    "id": "edge-1761642714360",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After extracting variable"
+                    }
+                }
+            ],
+            "variables": [
+                {
+                    "name": "date",
+                    "description": "The specific date that the user asks for in ISO format (YYYY-MM-DD). IMPORTANT RULES: 1) If the user mentions only a day and month without specifying a year (e.g., 'dia doze de dezembro', '12 de dezembro'), you MUST use the current year ({{current_year}}). 2) If the user asks for 'another date' or 'different date' without specifying which date, and {{suggested_date}} exists, calculate the next day after suggested_date by adding 1 day to it. For example, if suggested_date is '2025-12-12', extract '2025-12-13'. 3) Only use a different year if the user explicitly mentions it (e.g., 'dezembro de 2026').",
+                    "type": "string",
+                    "choices": []
+                }
+            ],
+            "id": "node-1761642714360",
+            "type": "extract_dynamic_variables",
+            "display_position": {
+                "x": 767.382425595225,
+                "y": -1923.105940552049
+            }
+        },
+        {
+            "tool_id": "tool-1761643337360",
+            "instruction": {
+                "type": "prompt",
+                "text": "CRITICAL - Use appropriate language based on context:\n- If user asked for a SPECIFIC date (e.g., 'tem no dia 25?', 'e na semana que vem?'): Say \"Deixa eu verificar essa data para você... <break time='600ms'/>\"\n- If user asked for ANOTHER date or DIFFERENT date WITHOUT specifying which date (e.g., 'outra data', 'tem outra data?', 'queria ver outras opções'): Say \"Deixa eu verificar outras opções de data para você... <break time='600ms'/>\"\n- Always match your language to what the user actually asked for - do not say \"essa data\" when user asked for \"outra data\" without specifying"
+            },
+            "name": "Check-availability",
+            "edges": [
+                {
+                    "destination_node_id": "node-1761643425313",
+                    "id": "edge-1761643360242",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After receive the response"
+                    }
+                }
+            ],
+            "id": "node-1761643340519",
+            "type": "function",
+            "tool_type": "local",
+            "speak_during_execution": true,
+            "display_position": {
+                "x": 1178.9634230451948,
+                "y": -1933.820067108459
+            },
+            "wait_for_result": true
+        },
+        {
+            "name": "Present_Specific_Date_Result",
+            "edges": [
+                {
+                    "destination_node_id": "node-1759438663446",
+                    "id": "edge-1761643425313",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "user agrees"
+                    }
+                },
+                {
+                    "destination_node_id": "node-1761642714360",
+                    "id": "edge-1761643596719",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "user asks about ANOTHER specific date"
+                    }
+                },
+                {
+                    "destination_node_id": "node-1757798764782",
+                    "id": "edge-1764641936705-8jrmz5mcu",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User clearly declines ('não quero', 'não tenho interesse', 'não vou fazer')"
+                    }
+                }
+            ],
+            "id": "node-1761643425313",
+            "type": "conversation",
+            "display_position": {
+                "x": 1631.0369925322525,
+                "y": -1934.0338001734417
+            },
+            "instruction": {
+                "type": "prompt",
+                "text": "**After check-availability function returns:**\n\n**CRITICAL - Distinguish between SPECIFIC date request vs GENERAL \"other date\" request:**\n\n**If user asked for a SPECIFIC date (e.g., 'tem no dia 25?', 'e na semana que vem?'):**\n- **If available ({{available}} is true):**\n  \"Ótimo! <break time='300ms'/> Sim, temos horários disponíveis [TIME_OF_DAY from availableSlots] no dia [DATE]. Posso confirmar esse horário para você?\"\n- **If NOT available ({{available}} is false):**\n  \"Hmm, infelizmente nesse dia específico a agenda já está preenchida. <break time='300ms'/> Mas como eu te mostrei antes, temos disponibilidade em: {{available_slots}}. Algum desses funciona para você?\"\n\n**If user asked for ANOTHER date or DIFFERENT date WITHOUT specifying which date (e.g., 'outra data', 'tem outra data?', 'queria ver outras opções'):**\n- **If available ({{available}} is true):**\n  \"Ótimo! <break time='300ms'/> Encontrei outras opções disponíveis: [LIST availableSlots with dates and times]. Qual dessas funciona melhor para você?\"\n- **If NOT available ({{available}} is false):**\n  \"Hmm, infelizmente essa data também não está disponível. <break time='300ms'/> Mas como eu te mostrei antes, temos disponibilidade em: {{available_slots}}. Algum desses funciona para você?\"\n- **NEVER say \"nesse dia específico\" when user did NOT specify a specific day**\n- **NEVER say \"essa data\" when user asked for \"outra data\" without specifying**\n\n**CRITICAL - WAIT FOR USER RESPONSE:**\n- After presenting dates/slots, you MUST WAIT for the user's response\n- DO NOT proceed automatically or end the conversation\n- DO NOT transition to any other node until the user explicitly responds\n- If user asks a question, answer it completely before asking again about the dates\n- If user says nothing, wait patiently - do not assume they're done\n- Only proceed when user explicitly:\n  - Agrees to one of the presented slots (\"pode\", \"sim\", \"quero\", chooses a date)\n  - Expresses concerns or objections\n  - Asks about another specific date\n- Stay positive and solution-oriented\n- Guide toward booking, never away from it"
+            }
+        },
+        {
+            "name": "Conversation",
+            "edges": [
+                {
+                    "destination_node_id": "node-1757330614671",
+                    "id": "edge-1764642342722-xthpbxzda",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "Describe the transition condition"
+                    }
+                }
+            ],
+            "id": "node-1764642342722",
+            "type": "conversation",
+            "display_position": {
+                "x": 4054.414506276841,
+                "y": 263.65072157347845
+            },
+            "instruction": {
+                "type": "prompt",
+                "text": "Perfeito! Obrigado(a) pelo seu tempo. Será um prazer receber você aqui na {{business_name}}. Até breve!"
+            }
+        }
+    ],
+    "start_node_id": "node-1757535785664",
+    "start_speaker": "user",
+    "tools": [
+        {
+            "headers": {},
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "lead_id": "{{lead_id}}",
+                "mismatched_reason": "{{mismatched_reason}}"
+            },
+            "description": "",
+            "type": "custom",
+            "url": "https://app.aluri.ai/retell/check-identity",
+            "tool_id": "tool-1757295373150",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "Check-identity",
+            "response_variables": {
+                "divergent": "divergent"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "lead_id": {
+                        "type": "string",
+                        "description": ""
+                    },
+                    "mismatched_reason": {
+                        "type": "string",
+                        "description": ""
+                    }
+                }
+            }
+        },
+        {
+            "headers": {},
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "description": "Tratamento {{treatment_name}} na {{clinic_name}}",
+                "lead_id": "{{lead_id}}",
+                "amount": "{{treatment_price}}"
+            },
+            "description": "",
+            "type": "custom",
+            "url": "https://app.aluri.ai/fn/create-payment-link",
+            "tool_id": "tool-1757365061137",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "Create_payment_link",
+            "response_variables": {
+                "url": "url"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "description": {
+                        "type": "string",
+                        "description": ""
+                    },
+                    "lead_id": {
+                        "type": "string",
+                        "description": ""
+                    },
+                    "amount": {
+                        "type": "string",
+                        "description": ""
+                    }
+                }
+            }
+        },
+        {
+            "headers": {},
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "lead_id": "{{lead_id}}",
+                "preferred_channel": "{{preferred_channel}}"
+            },
+            "description": "",
+            "type": "custom",
+            "url": "https://app.aluri.ai/api/fn/set-communication-preference",
+            "tool_id": "tool-1757365620921",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "Save_preference",
+            "response_variables": {
+                "ok": "ok"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "description": {
+                        "type": "string",
+                        "description": ""
+                    },
+                    "lead_id": {
+                        "type": "string",
+                        "description": ""
+                    },
+                    "preferred_channel": {
+                        "type": "string",
+                        "description": ""
+                    }
+                }
+            }
+        },
+        {
+            "headers": {},
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {
+                "when_iso": "{{when_time_iso}}",
+                "lead_id": "{{lead_id}}"
+            },
+            "description": "",
+            "type": "custom",
+            "url": "https://app.aluri.ai/fn/schedule-call",
+            "tool_id": "tool-1757416342856",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "Schedule_call",
+            "response_variables": {
+                "schedule_status": "ok"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "args": {
+                        "type": "object",
+                        "description": "",
+                        "properties": {
+                            "when_time_iso": {
+                                "type": "string",
+                                "description": ""
+                            },
+                            "lead_id": {
+                                "type": "string",
+                                "description": ""
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "headers": {
+                "url": "payment_url",
+                "to": "{{phone}}"
+            },
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {},
+            "description": "",
+            "type": "custom",
+            "url": "https://app.aluri.ai/fn/send-payment-link",
+            "tool_id": "tool-1757418989577",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "Send_link_WA",
+            "response_variables": {},
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": ""
+                    },
+                    "to": {
+                        "type": "string",
+                        "description": ""
+                    }
+                }
+            }
+        },
+        {
+            "headers": {
+                "url": "{{payment_url}}",
+                "to": "{{phone}}"
+            },
+            "parameter_type": "form",
+            "method": "POST",
+            "query_params": {},
+            "description": "",
+            "type": "custom",
+            "url": "https://app.aluri.ai/api/fn/send-payment-link",
+            "tool_id": "tool-1757419062296",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "Send_link_SMS",
+            "response_variables": {},
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": ""
+                    },
+                    "to": {
+                        "type": "string",
+                        "description": ""
+                    }
+                }
+            }
+        },
+        {
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "parameter_type": "json",
+            "method": "POST",
+            "query_params": {
+                "date": "{{date}}",
+                "lead_id": "{{lead_id}}"
+            },
+            "description": "",
+            "type": "custom",
+            "url": "https://app.aluri.ai/api/retell/check-availability",
+            "tool_id": "tool-1761643337360",
+            "args_at_root": false,
+            "timeout_ms": 120000,
+            "name": "check-availability",
+            "response_variables": {
+                "available": "available",
+                "timezone": "timezone",
+                "availableSlots": "availableSlots"
+            },
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "args": {
+                        "type": "object",
+                        "description": "",
+                        "properties": {
+                            "date": {
+                                "type": "string",
+                                "description": ""
+                            },
+                            "lead_id": {
+                                "type": "string",
+                                "description": ""
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ],
+    "model_choice": {
+        "type": "cascading",
+        "model": "gpt-4.1",
+        "high_priority": false
+    },
+    "model_temperature": 0.3,
+    "tool_call_strict_mode": false,
+    "knowledge_base_ids": [],
+    "kb_config": {
+        "top_k": 3,
+        "filter_score": 0.6
+    },
+    "begin_tag_display_position": {
+        "x": -133.09621416225406,
+        "y": 41.529930686396256
+    },
+    "is_published": false,
+    "mcps": [
+        {
+            "name": "TimeSlots",
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "id": "mcp-1759624518957",
+            "query_params": {},
+            "url": "https://app.aluri.ai/api/fn/check-availability",
+            "timeout_ms": 10000
+        }
+    ]
+}
