@@ -700,6 +700,7 @@ router.get('/call-logs', verifyJWT, async (req, res) => {
         doctorSpecialty: isTreatment
           ? (treatment?.treatment_benefit || null)
           : (log.doctors?.specialty || null),
+        status: log.status, // Include status field from database
         outcome: log.outcome,
         disposition: log.disposition,
         attemptNo: log.attempt_no,
@@ -1355,14 +1356,14 @@ router.patch('/:id', verifyJWT, async (req, res) => {
     const updateData = req.body;
 
     // If no valid fields to update, return error
-    if (Object.keys(filteredUpdateData).length === 0) {
+    if (Object.keys(updateData).length === 0) {
       return res.status(400).json({ error: 'No valid fields to update' });
     }
 
     // First get the current agent to check if it has a retell_agent_id and service_type
     const { data: currentAgent, error: fetchError } = await supa
       .from('agents')
-      .select('retell_agent_id, service_type')
+      .select('retell_agent_id, service_type, channel')
       .eq('id', id)
       .eq('owner_id', req.user.id)
       .single();
@@ -1390,6 +1391,37 @@ router.patch('/:id', verifyJWT, async (req, res) => {
 
     if (!agent) {
       return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // If toggling activation for a voice agent, also toggle the corresponding chat agent
+    if (updateData.hasOwnProperty('is_active') && currentAgent.channel === 'voice') {
+      try {
+        // Find the chat agent with the same owner and service_type
+        const { data: chatAgent, error: chatAgentError } = await supa
+          .from('agents')
+          .select('id')
+          .eq('owner_id', req.user.id)
+          .eq('service_type', currentAgent.service_type)
+          .eq('channel', 'chat')
+          .single();
+
+        if (!chatAgentError && chatAgent) {
+          // Toggle the chat agent's active status to match the voice agent
+          const { error: chatUpdateError } = await supa
+            .from('agents')
+            .update({ is_active: updateData.is_active })
+            .eq('id', chatAgent.id);
+
+          if (chatUpdateError) {
+            log.warn(`Failed to ${updateData.is_active ? 'activate' : 'deactivate'} chat agent ${chatAgent.id}:`, chatUpdateError);
+          } else {
+            log.info(`${updateData.is_active ? 'Activated' : 'Deactivated'} chat agent ${chatAgent.id} along with voice agent ${id}`);
+          }
+        }
+      } catch (toggleChatError) {
+        log.warn('Error toggling chat agent:', toggleChatError);
+        // Don't fail the request if chat agent toggle fails
+      }
     }
 
     // Get all agents for this user

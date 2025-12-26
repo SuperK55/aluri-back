@@ -32,7 +32,7 @@ router.get('/users', verifyJWT, requireAdmin, async (req, res) => {
     // Build query
     let query = supa
       .from('users')
-      .select('id, email, name, specialty, service_type, role, is_active, location, created_at, updated_at, last_login')
+      .select('id, email, name, service_type, role, is_active, location, created_at, updated_at, last_login')
       .order('created_at', { ascending: false });
 
     // Apply filters
@@ -254,7 +254,7 @@ router.get('/users/me', verifyJWT, async (req, res) => {
 
     const { data: user, error } = await supa
       .from('users')
-      .select('id, email, name, specialty, service_type, role, is_active, location, working_hours, date_specific_availability, timezone, social_proof_enabled, social_proof_text, google_calendar_id, calendar_sync_enabled, last_calendar_sync, twilio_phone_number, twilio_subaccount_sid')
+      .select('id, email, name, service_type, role, is_active, location, working_hours, date_specific_availability, timezone, social_proof_enabled, social_proof_text, google_calendar_id, calendar_sync_enabled, last_calendar_sync, twilio_phone_number, twilio_subaccount_sid')
       .eq('id', userId)
       .single();
 
@@ -346,7 +346,7 @@ router.get('/users/:id', verifyJWT, requireAdmin, async (req, res) => {
 
     const { data: user, error } = await supa
       .from('users')
-      .select('id, email, name, specialty, role, is_active, location, created_at, updated_at, last_login')
+      .select('id, email, name, service_type, role, is_active, location, created_at, updated_at, last_login')
       .eq('id', id)
       .single();
 
@@ -457,7 +457,7 @@ router.patch('/users/:id', verifyJWT, requireAdmin, async (req, res) => {
       .from('users')
       .update(updates)
       .eq('id', id)
-      .select('id, email, name, specialty, service_type, role, is_active, location, created_at, updated_at, last_login')
+      .select('id, email, name, service_type, role, is_active, location, created_at, updated_at, last_login')
       .single();
 
     if (updateError) {

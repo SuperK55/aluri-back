@@ -4,7 +4,7 @@ import { supa } from '../lib/supabase.js';
 import { log } from '../config/logger.js';
 import { Retell } from 'retell-sdk';
 import { env } from '../config/env.js';
-import { getNowInSaoPaulo, getIsoStringNow } from '../utils/timezone.js';
+import { getNowInSaoPaulo, getIsoStringNow, toIsoStringSaoPaulo } from '../utils/timezone.js';
 import { agentManager } from '../services/agentManager.js';
 import { googleCalendarService } from '../services/googleCalendar.js';
 import { whatsappBusinessService } from '../services/whatsappBusiness.js';
@@ -161,19 +161,14 @@ async function computeNextRetry(attemptNo, { inVoicemail = false, leadId = null 
   
   let nextRetryTime = calculateNextSlot(now);
   
-  // If there's an appointment, check if we need to adjust the retry time
   if (appointmentTime) {
     const timeDiffMs = Math.abs(appointmentTime.getTime() - nextRetryTime.getTime());
     const timeDiffHours = timeDiffMs / (1000 * 60 * 60);
     
-    // If the difference between next retry time and appointment is less than 2 hours,
-    // move to the next available slot
     if (timeDiffHours < 2) {
-      // Move to next business day 8 AM
       nextRetryTime.setDate(nextRetryTime.getDate() + 1);
       
-      // Find next valid business day (Monday to Saturday)
-      while (nextRetryTime.getDay() === 0) { // Skip Sundays
+      while (nextRetryTime.getDay() === 0) {
         nextRetryTime.setDate(nextRetryTime.getDate() + 1);
       }
       
@@ -181,29 +176,23 @@ async function computeNextRetry(attemptNo, { inVoicemail = false, leadId = null 
     }
   }
   
-  return nextRetryTime.toISOString();
+  // Format the date in São Paulo timezone with proper offset for database storage
+  // Use the utility function to ensure correct timezone handling
+  const { toIsoStringSaoPaulo } = await import('../utils/timezone.js');
+  return toIsoStringSaoPaulo(nextRetryTime);
 }
 
-/**
- * When a contact explicitly asks to be called again at the same time,
- * schedule for the same local time on the next business day (Mon-Sat)
- * and clamp to business hours window (08:00–20:00 São Paulo time).
- */
 function computeNextSameTimeNextBusinessDay(baseDate = null) {
-  // Use São Paulo time as business reference
   const reference = baseDate ? new Date(baseDate) : getNowInSaoPaulo();
   const saoPauloNow = new Date(reference.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
 
-  // Start with same time on the next day
   const target = new Date(saoPauloNow);
   target.setDate(target.getDate() + 1);
 
-  // Skip Sundays
   while (target.getDay() === 0) {
     target.setDate(target.getDate() + 1);
   }
 
-  // Keep the same hour/minute as reference
   target.setHours(saoPauloNow.getHours(), saoPauloNow.getMinutes(), 0, 0);
 
   // Clamp to business hours (08:00–20:00)
@@ -218,7 +207,9 @@ function computeNextSameTimeNextBusinessDay(baseDate = null) {
     target.setHours(8, 0, 0, 0);
   }
 
-  return target.toISOString();
+  // Format the date in São Paulo timezone with proper offset for database storage
+  // Use the utility function to ensure correct timezone handling
+  return toIsoStringSaoPaulo(target);
 }
 
 async function findAttemptByCallId(callId) {
@@ -245,15 +236,15 @@ async function maxAttemptNo(leadId) {
 r.post('/retell/webhook', async (req, res) => {
   
   if (
-        !Retell.verify(
-          JSON.stringify(req.body),
-          env.RETELL_API_KEY,
-          req.headers["x-retell-signature"] || '',
-        )
-      ) {
-        console.error("Invalid signature");
-        return;
-      }
+    !Retell.verify(
+      JSON.stringify(req.body),
+      env.RETELL_API_KEY,
+      req.headers["x-retell-signature"] || '',
+    )
+  ) {
+    console.error("Invalid signature");
+    return;
+  }
 
   try {
     const evt = req.body || {};
@@ -440,7 +431,43 @@ r.post('/retell/webhook', async (req, res) => {
                   resource_id: lead.assigned_resource_id
                 };
                 
-                const { data: newChat, error: chatError } = await supa
+                // Check for existing active chat for this phone number
+                const { data: existingChat } = await supa
+                  .from('whatsapp_chats')
+                  .select('id')
+                  .eq('wa_phone', normalizedPhone)
+                  .in('status', ['open', 'pending_response'])
+                  .single();
+
+                let newChat;
+                if (existingChat) {
+                  // Update existing active chat
+                  const { data: updatedChat, error: updateError } = await supa
+                    .from('whatsapp_chats')
+                    .update({
+                      lead_id: lead.id,
+                      agent_id: chatAgent.id,
+                      status: 'pending_response',
+                      metadata: chatMetadata,
+                      agent_variables: {
+                        ...(lead.agent_variables || {}),
+                        name: firstName,
+                        client_name: lead.name,
+                        business_name: ownerData?.business_name || 'Clínica',
+                        agent_name: chatAgent.agent_name || 'Assistente'
+                      },
+                      last_message_at: new Date().toISOString()
+                    })
+                    .eq('id', existingChat.id)
+                    .select()
+                    .single();
+
+                  if (!updateError && updatedChat) {
+                    newChat = updatedChat;
+                  }
+                } else {
+                  // Insert new chat record
+                  const { data: insertedChat, error: chatError } = await supa
                   .from('whatsapp_chats')
                   .insert({
                     owner_id: ownerId,
@@ -461,7 +488,12 @@ r.post('/retell/webhook', async (req, res) => {
                   .select()
                   .single();
                 
-                if (!chatError && newChat) {
+                  if (!chatError && insertedChat) {
+                    newChat = insertedChat;
+                  }
+                }
+                
+                if (newChat) {
                   // Store the outbound template message
                   await supa
                     .from('whatsapp_messages')
@@ -541,10 +573,21 @@ r.post('/retell/webhook', async (req, res) => {
             if (!doctorError && doctor) {
               resourceName = doctor.name;
               timezone = doctor.timezone || timezone;
-              durationMinutes = doctor.consultation_duration || durationMinutes;
+              // Ensure consultation_duration is used if available, otherwise keep default
+              if (doctor.consultation_duration !== null && doctor.consultation_duration !== undefined) {
+                durationMinutes = doctor.consultation_duration;
+              }
               googleCalendarEnabled = !!(doctor.google_calendar_id && doctor.google_refresh_token);
               googleCalendarDoctorId = assignedResourceId;
               officeAddress = doctor.office_address || null;
+              
+              log.info('Doctor configuration loaded:', {
+                doctorId: assignedResourceId,
+                doctorName: resourceName,
+                consultationDuration: doctor.consultation_duration,
+                durationMinutes,
+                timezone
+              });
             }
             templateName = 'appointment_confirmation_doc';
             serviceType = 'clinic';
@@ -606,7 +649,50 @@ r.post('/retell/webhook', async (req, res) => {
           };
           const offset = timezoneOffsetMap[timezone] || '-03:00';
           const startAt = `${appointmentDate}T${appointmentTime}:00${offset}`;
-          const endAt = new Date(new Date(startAt).getTime() + durationMinutes * 60000).toISOString();
+          
+          // Log duration for debugging
+          log.info('Calculating appointment end time:', {
+            appointmentDate,
+            appointmentTime,
+            durationMinutes,
+            startAt
+          });
+          
+          // Calculate end time preserving timezone
+          // Parse start time and add duration
+          const startDate = new Date(startAt);
+          const endDate = new Date(startDate.getTime() + durationMinutes * 60000);
+          
+          // Format end date in the same timezone as start (don't convert to UTC)
+          // Use Intl.DateTimeFormat to format in the local timezone
+          const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: timezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          });
+          
+          const parts = formatter.formatToParts(endDate);
+          const endYear = parts.find(p => p.type === 'year').value;
+          const endMonth = parts.find(p => p.type === 'month').value;
+          const endDay = parts.find(p => p.type === 'day').value;
+          const endHour = parts.find(p => p.type === 'hour').value;
+          const endMinute = parts.find(p => p.type === 'minute').value;
+          const endSecond = parts.find(p => p.type === 'second').value;
+          
+          const endAt = `${endYear}-${endMonth}-${endDay}T${endHour}:${endMinute}:${endSecond}${offset}`;
+          
+          log.info('Calculated appointment times:', {
+            startAt,
+            endAt,
+            durationMinutes,
+            calculatedDurationMs: endDate.getTime() - startDate.getTime(),
+            calculatedDurationMinutes: (endDate.getTime() - startDate.getTime()) / 60000
+          });
 
           const { data: appointmentInsert, error: appointmentError } = await supa
             .from('appointments')
@@ -617,7 +703,7 @@ r.post('/retell/webhook', async (req, res) => {
               resource_id: assignedResourceId,
               appointment_type: 'consultation',
               start_at: new Date(startAt).toISOString(),
-              end_at: endAt,
+              end_at: new Date(endAt).toISOString(),
               timezone,
               status: 'scheduled',
               office_address: location,
@@ -639,6 +725,8 @@ r.post('/retell/webhook', async (req, res) => {
           let googleEventId = null;
           if (googleCalendarEnabled && appointmentId) {
             try {
+              // Use startAt and endAt directly with timezone offset preserved
+              // Google Calendar API expects RFC3339 format with timezone
               const appointmentData = {
                 summary: resourceType === 'treatment' 
                   ? `Tratamento - ${lead.name || 'Cliente'}`
@@ -647,15 +735,22 @@ r.post('/retell/webhook', async (req, res) => {
                   ? `Tratamento: ${resourceName}`
                   : `Consulta com ${resourceName}`,
                 start: {
-                  dateTime: new Date(startAt).toISOString(),
+                  dateTime: startAt, // Use original string with timezone offset
                   timeZone: timezone
                 },
                 end: {
-                  dateTime: endAt,
+                  dateTime: endAt, // Use formatted string with timezone offset
                   timeZone: timezone
                 },
                 location: location || undefined
               };
+
+              log.info('Creating Google Calendar event from Retell flow:', {
+                leadId: lead.id,
+                appointmentData,
+                doctorId: googleCalendarDoctorId,
+                resourceType
+              });
 
               let googleEvent;
               if (resourceType === 'treatment') {
@@ -756,7 +851,46 @@ r.post('/retell/webhook', async (req, res) => {
           );
 
           const waPhone = patientPhone.replace(/[^\d]/g, '');
-          const { data: chatRecord, error: chatInsertError } = await supa
+          
+          // Check for existing active chat for this phone number
+          const { data: existingChat } = await supa
+            .from('whatsapp_chats')
+            .select('id')
+            .eq('wa_phone', waPhone)
+            .in('status', ['open', 'pending_response'])
+            .single();
+
+          let chatRecord;
+          if (existingChat) {
+            // Update existing active chat
+            const { data: updatedChat, error: updateError } = await supa
+              .from('whatsapp_chats')
+              .update({
+                lead_id: lead.id,
+                retell_chat_id: retellChatId,
+                agent_id: chatAgent?.retell_agent_id || null,
+                status: 'pending_response',
+                metadata: {
+                  chat_type: 'confirm_appointment',
+                  appointment_id: appointmentId,
+                  resource_type: resourceType,
+                  resource_id: assignedResourceId,
+                  template_name: templateName
+                },
+                last_message_at: new Date().toISOString()
+              })
+              .eq('id', existingChat.id)
+              .select('id')
+              .single();
+
+            if (updateError) {
+              log.error('Error updating whatsapp_chats record:', updateError.message);
+            } else {
+              chatRecord = updatedChat;
+            }
+          } else {
+            // Insert new chat record
+            const { data: newChat, error: chatInsertError } = await supa
             .from('whatsapp_chats')
             .insert({
               owner_id: ownerId,
@@ -779,6 +913,9 @@ r.post('/retell/webhook', async (req, res) => {
 
           if (chatInsertError) {
             log.error('Error creating whatsapp_chats record:', chatInsertError.message);
+            } else {
+              chatRecord = newChat;
+            }
           }
 
           if (chatRecord && result?.messageId) {
@@ -848,16 +985,16 @@ r.post('/retell/webhook', async (req, res) => {
 
 r.post('/retell/check-availability', async (req, res) => {
 
-  // if (
-  //   !Retell.verify(
-  //     JSON.stringify(req.body),
-  //     env.RETELL_API_KEY,
-  //     req.headers["x-retell-signature"] || '',
-  //   )
-  // ) {
-  //   console.error("Invalid signature");
-  //   return;
-  // }
+  if (
+    !Retell.verify(
+      JSON.stringify(req.body),
+      env.RETELL_API_KEY,
+      req.headers["x-retell-signature"] || '',
+    )
+  ) {
+    console.error("Invalid signature");
+    return;
+  }
 
   try {
     const lead_id = req.body?.args?.lead_id || req.body?.lead_id || req.query?.lead_id;
@@ -1128,28 +1265,36 @@ r.post('/retell/check-availability', async (req, res) => {
       const endOfDay = new Date(dateString + `T23:59:59${offset}`);
 
       // Query appointments based on resource type
-      let appointmentsQuery = supa
-        .from('appointments')
-        .select('start_at, end_at')
-        .gte('start_at', startOfDay.toISOString())
-        .lte('start_at', endOfDay.toISOString())
-        .eq('status', 'scheduled');
-
+      // Use resource_type and resource_id (polymorphic fields)
+      let appointments = [];
+      
       if (resourceType === 'doctor') {
-        // For doctors, use resource assignment fields
-        appointmentsQuery = appointmentsQuery
+        // Query for appointments with resource_type/resource_id
+        const { data: appointmentsData } = await supa
+          .from('appointments')
+          .select('start_at, end_at')
           .eq('resource_type', 'doctor')
-          .eq('resource_id', resourceId);
+          .eq('resource_id', resourceId)
+          .gte('start_at', startOfDay.toISOString())
+          .lte('start_at', endOfDay.toISOString())
+          .eq('status', 'scheduled');
+        
+        appointments = appointmentsData || [];
       } else if (resourceType === 'treatment') {
         // For treatments, use resource_type and resource_id fields
-        appointmentsQuery = appointmentsQuery
+        const { data: treatmentAppointments } = await supa
+          .from('appointments')
+          .select('start_at, end_at')
           .eq('resource_type', 'treatment')
-          .eq('resource_id', resourceId);
+          .eq('resource_id', resourceId)
+          .gte('start_at', startOfDay.toISOString())
+          .lte('start_at', endOfDay.toISOString())
+          .eq('status', 'scheduled');
+        
+        appointments = treatmentAppointments || [];
       }
 
-      const { data: appointments } = await appointmentsQuery;
-
-      const busySlots = appointments || [];
+      const busySlots = appointments;
 
       const minimumBufferMinutes = 60;
       // #region agent log
@@ -1228,16 +1373,11 @@ r.post('/retell/check-availability', async (req, res) => {
       const { data: allAppointments } = await allAppointmentsQuery;
       const allBusySlots = allAppointments || [];
 
-      // Search through days to find next available slots
       for (let i = 0; i < maxDaysToCheck && nextSlots.length < 2; i++) {
         const checkDate = new Date(startSearchDate);
         checkDate.setDate(checkDate.getDate() + i);
-        // Get date string in the resource's timezone to match the format stored in unavailableDates
         const checkDateString = getDateStringInTimezone(checkDate, timezone);
         
-        log.debug(`Checking next available slot for date: ${checkDateString}`);
-        
-        // Skip if date is specifically marked as unavailable (normalize date format for comparison)
         const isUnavailableDate = dateSpecificAvailability.some(item => {
           if (item.type !== 'unavailable' || !item.date) return false;
           // Normalize both dates for comparison
@@ -1800,7 +1940,13 @@ r.post('/retell/chat-book-appointment', async (req, res) => {
     }
 
     const startAt = `${normalizedDate}T${timeStr}:00${offset}`;
-    const endAt = new Date(new Date(startAt).getTime() + durationMinutes * 60000).toISOString();
+    
+    // Calculate end time preserving timezone
+    const startDate = new Date(startAt);
+    const endDate = new Date(startDate.getTime() + durationMinutes * 60000);
+    // Format end date with same timezone offset as start
+    const endAtISO = endDate.toISOString();
+    const endAt = endAtISO.replace('Z', offset);
 
     const { data: appointmentInsert, error: appointmentError } = await supa
       .from('appointments')
@@ -1811,7 +1957,7 @@ r.post('/retell/chat-book-appointment', async (req, res) => {
         resource_id: resourceId,
         appointment_type: resourceType === 'treatment' ? 'treatment' : 'consultation',
         start_at: new Date(startAt).toISOString(),
-        end_at: endAt,
+        end_at: new Date(endAt).toISOString(),
         timezone,
         status: 'scheduled',
         office_address: location,
@@ -1831,6 +1977,7 @@ r.post('/retell/chat-book-appointment', async (req, res) => {
 
     if (googleCalendarEnabled && appointmentId) {
       try {
+        // Use startAt and endAt directly with timezone offset preserved
         const appointmentData = {
           summary: resourceType === 'treatment'
             ? `Tratamento - ${lead.name || 'Cliente'}`
@@ -1838,10 +1985,17 @@ r.post('/retell/chat-book-appointment', async (req, res) => {
           description: resourceType === 'treatment'
             ? `Tratamento: ${resourceName}\nAgendado via chat`
             : `Consulta com ${resourceName}\nAgendado via chat`,
-          start: { dateTime: new Date(startAt).toISOString(), timeZone: timezone },
-          end: { dateTime: endAt, timeZone: timezone },
+          start: { dateTime: startAt, timeZone: timezone }, // Use original string with timezone offset
+          end: { dateTime: endAt, timeZone: timezone }, // Use formatted string with timezone offset
           location: location || undefined
         };
+
+        log.info('[chat-book-appointment] Creating Google Calendar event:', {
+          leadId: lead.id,
+          appointmentData,
+          resourceId,
+          resourceType
+        });
 
         let googleEvent;
         if (resourceType === 'treatment') {
@@ -1958,7 +2112,32 @@ r.post('/retell/chat-reschedule-appointment', async (req, res) => {
     }
 
     const newStartAt = `${normalizedDate}T${timeStr}:00${offset}`;
-    const newEndAt = new Date(new Date(newStartAt).getTime() + durationMinutes * 60000).toISOString();
+    
+    // Calculate end time preserving timezone
+    const newStartDate = new Date(newStartAt);
+    const newEndDate = new Date(newStartDate.getTime() + durationMinutes * 60000);
+    
+    // Format end date in the same timezone as start (don't convert to UTC)
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+    
+    const parts = formatter.formatToParts(newEndDate);
+    const endYear = parts.find(p => p.type === 'year').value;
+    const endMonth = parts.find(p => p.type === 'month').value;
+    const endDay = parts.find(p => p.type === 'day').value;
+    const endHour = parts.find(p => p.type === 'hour').value;
+    const endMinute = parts.find(p => p.type === 'minute').value;
+    const endSecond = parts.find(p => p.type === 'second').value;
+    
+    const newEndAt = `${endYear}-${endMonth}-${endDay}T${endHour}:${endMinute}:${endSecond}${offset}`;
 
     const { data: ownerData } = await supa
       .from('users')
@@ -1972,7 +2151,7 @@ r.post('/retell/chat-reschedule-appointment', async (req, res) => {
       .from('appointments')
       .update({ 
         start_at: new Date(newStartAt).toISOString(), 
-        end_at: newEndAt, 
+        end_at: new Date(newEndAt).toISOString(), 
         office_address: finalLocation,
         updated_at: new Date().toISOString() 
       })
@@ -1996,19 +2175,35 @@ r.post('/retell/chat-reschedule-appointment', async (req, res) => {
           resourceName = treatment?.treatment_name || resourceName;
         }
 
+        // Use newStartAt and newEndAt directly with timezone offset preserved
+        // Note: updateAppointment expects startTime/endTime, not start.dateTime/end.dateTime
         const updateData = {
-          summary: resourceType === 'treatment' ? `Tratamento - ${lead?.name || 'Cliente'}` : `Consulta - ${lead?.name || 'Paciente'}`,
+          title: resourceType === 'treatment' ? `Tratamento - ${lead?.name || 'Cliente'}` : `Consulta - ${lead?.name || 'Paciente'}`,
           description: resourceType === 'treatment' ? `Tratamento: ${resourceName}\nReagendado via chat` : `Consulta com ${resourceName}\nReagendado via chat`,
-          start: { dateTime: new Date(newStartAt).toISOString(), timeZone: timezone },
-          end: { dateTime: newEndAt, timeZone: timezone },
+          startTime: newStartAt, // Use original string with timezone offset
+          endTime: newEndAt, // Use formatted string with timezone offset
+          timezone: timezone,
           location: finalLocation
         };
+
+        log.info('[chat-reschedule-appointment] Updating Google Calendar event:', {
+          appointmentId: appointment.id,
+          eventId: appointment.gcal_event_id,
+          updateData,
+          resourceId,
+          resourceType
+        });
 
         if (resourceType === 'treatment') {
           await googleCalendarService.updateTreatmentAppointment(ownerId, appointment.gcal_event_id, updateData);
         } else {
           await googleCalendarService.updateAppointment(resourceId, appointment.gcal_event_id, updateData);
         }
+        
+        log.info('[chat-reschedule-appointment] Google Calendar event updated successfully:', {
+          appointmentId: appointment.id,
+          eventId: appointment.gcal_event_id
+        });
       } catch (calendarError) {
         log.warn('[chat-reschedule-appointment] Failed to update Google Calendar event:', calendarError.message);
       }

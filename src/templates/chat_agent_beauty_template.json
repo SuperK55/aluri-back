@@ -255,7 +255,7 @@
         {
             "instruction": {
                 "type": "prompt",
-                "text": "CHAT TYPE: 'confirm_appointment' - User is REPLYING to our appointment_confirmation_treat template.\n\nThe appointment is ALREADY confirmed.\n\n## Based on user's response:\n\n**If user confirms/thanks (ok, obrigado, perfeito, entendido):**\n\"Ótimo, {{name}}! 😊\nQualquer dúvida, é só chamar aqui.\nAté o dia do tratamento! 💆✨\"\n\n**If user asks about something (endereço, valor, como funciona):**\nAnswer their question directly.\n\n**If user wants to reschedule:**\nRoute to Reschedule_Flow node. The Reschedule_Flow will ask \"Para qual dia você gostaria de remarcar?\" first - DO NOT offer alternatives immediately.\n\n**If user wants to cancel:**\n\"Entendi, {{name}}. Posso cancelar o agendamento.\nPosso ajudar em outra coisa? 😊\"\n\nWait for response."
+                "text": "CHAT TYPE: 'confirm_appointment' - User is REPLYING to our appointment_confirmation_treat template.\n\nThe template they received was:\n\"Perfeito, {{name}}! 🎉\nSeu atendimento com {{treatment_name}} está confirmado para o dia {{appointment_date}}, às {{appointment_time}}.\n📍 Endereço / Link: {{location}}\n\nCaso precise remarcar, é só responder por aqui. 😊\"\n\n## Your Task:\nACKNOWLEDGE their response. The appointment is ALREADY confirmed.\n\n## Based on user's response:\n\n**If user confirms/thanks (ok, obrigado, perfeito, entendido):**\n\"Ótimo, {{name}}! 😊\nQualquer dúvida, é só chamar aqui.\nAté o dia do tratamento! 💆✨\"\n\n**If user asks about something (endereço, valor, como funciona):**\nAnswer their question directly.\n\n**If user wants to reschedule:**\n\"Sem problemas, {{name}}! 😊\nVamos encontrar um novo horário para você.\nPara qual dia você gostaria de remarcar?\"\nAnd confirm the date what the client want\n\n**If user wants to cancel:**\n\"Entendi, {{name}}. Posso cancelar o agendamento.\nPosso ajudar em outra coisa? 😊\"\n\nWait for response."
             },
             "name": "Confirm_Appointment",
             "edges": [
@@ -357,24 +357,16 @@
         {
             "instruction": {
                 "type": "prompt",
-                "text": "User wants to reschedule their existing appointment.\n\n\"Sem problemas, {{name}}! 😊\nVamos encontrar um novo horário para você.\n\nPara qual dia você gostaria de remarcar?\"\n\nWait for user to tell their preferred date. DO NOT show available slots yet - first ask which date they prefer, then check availability for that date."
+                "text": "User wants to reschedule their existing appointment.\n\n\"Sem problemas, {{name}}! 😊\nVamos encontrar um novo horário para você.\nPara qual dia você gostaria de remarcar?\"\n\nWait user's response\n\n"
             },
             "name": "Reschedule_Flow",
             "edges": [
                 {
-                    "destination_node_id": "node-extract-reschedule-details",
+                    "destination_node_id": "node-extract-requested-date-reschedule",
                     "id": "edge-reschedule-to-extract",
                     "transition_condition": {
                         "type": "prompt",
                         "prompt": "User selects a new date and time"
-                    }
-                },
-                {
-                    "destination_node_id": "node-extract-requested-date",
-                    "id": "edge-reschedule-to-check-date",
-                    "transition_condition": {
-                        "type": "prompt",
-                        "prompt": "User asks for a specific date not in the available list"
                     }
                 },
                 {
@@ -482,6 +474,14 @@
                     "transition_condition": {
                         "type": "prompt",
                         "prompt": "User confirms or has no more questions"
+                    }
+                },
+                {
+                    "destination_node_id": "node-reschedule-flow",
+                    "id": "edge-reschedule-success-to-reschedule",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants to reschedule their appointment"
                     }
                 }
             ],
@@ -841,7 +841,7 @@
             "variables": [
                 {
                     "name": "date",
-                    "description": "The specific date the user is asking about in ISO format (YYYY-MM-DD). If user mentions only day and month without year, use current year {{current_year}}. If user asks for 'another date' without specifying, use the next day after {{suggested_date}}.",
+                    "description": "Date in ISO format (YYYY-MM-DD). Use {{current_year}} if year not specified. If {{suggested_date}} year differs, use its year. If user asks 'another date' without specifics, use next day after {{suggested_date}}.\n",
                     "type": "string",
                     "choices": []
                 }
@@ -932,7 +932,7 @@
             },
             "instruction": {
                 "type": "prompt",
-                "text": "Present the availability results from the check-availability function.\n\nIf {{available}} is true and we have {{availableSlots}}:\n\"Ótimo! Temos horários disponíveis para essa data! 😊\n\n👉 [Format each slot from availableSlots]\n\nQual funciona para você?\"\n\nIf {{available}} is false (no slots for the requested date):\n\"Infelizmente não temos horários disponíveis para essa data específica. 😕\n\nPara qual outra data você gostaria que eu verificasse?\"\n\nIMPORTANT: Do NOT show {{available_slots}} when {{available}} is false - those are pre-loaded slots that may be for different dates. Only show slots from {{availableSlots}} when {{available}} is true.\n\nWait for response."
+                "text": "Present the availability results from the check-availability function.\n\n- If {{available}} is true and we have {{availableSlots}}:\n\"Temos horários disponíveis para essa data! 😊\n\n👉 [Format each slot from availableSlots]\n\nQual funciona para você?\"\n\n- If {{available}} is false (no slots for the requested date):\n\"Desculpe, não temos horários disponíveis para essa data específica.\nMas temos outros dias e horários disponíveis, próximo a essa data.\nPosso te passar todos caso queira\n{{availableSlots}}\nQual funcionaria para você ?\"\n\n- if {{available}} is false and {{reason}} is \"weekend\"\n\"El médico no atiende pacientes los fines de semana. ¿Puedo preguntar por otras fechas disponibles? ¿O tiene alguna otra fecha preferida en mente?\"\n\nIMPORTANT: The doctor does not see patients on weekends.\n\nWait for response."
             }
         },
         {
@@ -1118,6 +1118,14 @@
                         "type": "prompt",
                         "prompt": "User confirms or has no more questions"
                     }
+                },
+                {
+                    "destination_node_id": "node-reschedule-flow",
+                    "id": "edge-success-to-reschedule",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants to reschedule their appointment"
+                    }
                 }
             ],
             "id": "node-booking-success",
@@ -1222,6 +1230,107 @@
             "display_position": {
                 "x": 1100,
                 "y": 500
+            }
+        },
+        {
+            "name": "Extract_Requested_Date",
+            "edges": [
+                {
+                    "destination_node_id": "node-check-availability-reschedule",
+                    "id": "edge-extract-reschedule-to-check",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After extracting date"
+                    }
+                }
+            ],
+            "variables": [
+                {
+                    "name": "date",
+                    "description": "Date in ISO format (YYYY-MM-DD). Use {{current_year}} if year not specified. If {{suggested_date}} year differs, use its year. If user asks 'another date' without specifics, use next day after {{suggested_date}}.\n",
+                    "type": "string",
+                    "choices": []
+                }
+            ],
+            "id": "node-extract-requested-date-reschedule",
+            "type": "extract_dynamic_variables",
+            "display_position": {
+                "x": 1607.3802912994292,
+                "y": 1253.9145080480318
+            }
+        },
+        {
+            "tool_id": "tool-check-availability",
+            "instruction": {
+                "type": "static_text",
+                "text": "Verificando disponibilidade... ⏳"
+            },
+            "name": "Check_Availability",
+            "edges": [
+                {
+                    "destination_node_id": "node-present-availability-results-reschedule",
+                    "id": "edge-check-reschedule-to-present",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After checking availability"
+                    }
+                }
+            ],
+            "id": "node-check-availability-reschedule",
+            "type": "function",
+            "tool_type": "local",
+            "speak_during_execution": false,
+            "display_position": {
+                "x": 1620.1862946314739,
+                "y": 1532.7746052845007
+            },
+            "wait_for_result": true
+        },
+        {
+            "name": "Present_Availability_Results",
+            "edges": [
+                {
+                    "destination_node_id": "node-extract-reschedule-details",
+                    "id": "edge-present-reschedule-to-extract",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User selects a time slot"
+                    }
+                },
+                {
+                    "destination_node_id": "node-extract-requested-date-reschedule",
+                    "id": "edge-present-reschedule-to-extract-date",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks about another date"
+                    }
+                },
+                {
+                    "destination_node_id": "node-cancel-appointment",
+                    "id": "edge-present-reschedule-to-cancel",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User decides to cancel instead"
+                    }
+                },
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-present-reschedule-to-goodbye",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User changes mind and wants to keep original appointment"
+                    }
+                }
+            ],
+            "id": "node-present-availability-results-reschedule",
+            "type": "conversation",
+            "display_position": {
+                "x": 1631.3562043562765,
+                "y": 1849.3177971248097
+            },
+            "instruction": {
+                "type": "prompt",
+                "text": "Present the availability results from the check-availability function.\n\n- If {{available}} is true and we have {{availableSlots}}:\n\"Temos horários disponíveis para essa data! 😊\n\n👉 [Format each slot from availableSlots]\n\nQual funciona para você?\"\n\n- If {{available}} is false (no slots for the requested date):\n\"Desculpe, não temos horários disponíveis para essa data específica.\nMas temos outros dias e horários disponíveis, próximo a essa data.\nPosso te passar todos caso queira\n{{availableSlots}}\nQual funcionaria para você ?\"\n\n- if {{available}} is false and {{reason}} is \"weekend\"\n\"El médico no atiende pacientes los fines de semana. ¿Puedo preguntar por otras fechas disponibles? ¿O tiene alguna otra fecha preferida en mente?\"\n\nIMPORTANT: The doctor does not see patients on weekends.\n\nWait for response."
             }
         },
         {

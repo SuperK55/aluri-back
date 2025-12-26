@@ -62,7 +62,7 @@
     "voice_model": "eleven_flash_v2_5",
     "voice_temperature": 1,
     "voice_speed": 1,
-    "volume": 1,
+    "volume": 1.30,
     "enable_backchannel": true,
     "backchannel_frequency": 0.9,
     "backchannel_words": [

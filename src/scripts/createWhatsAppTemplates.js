@@ -8,38 +8,38 @@ import { log } from '../config/logger.js';
 
 // Define templates based on template.md
 const templates = [
-  // {
-  //   name: 'initial_welcome',
-  //   category: 'UTILITY',
-  //   language: 'pt_BR',
-  //   components: [
-  //     {
-  //       type: 'BODY',
-  //       text: 'Olá, {{1}}! 👋\nSou a {{2}}, assistente da clínica {{3}}.\n\nTentamos entrar em contato por telefone para confirmar sua consulta, mas não conseguimos falar com você.\n\nPodemos continuar o atendimento por aqui? 😊',
-  //       example: {
-  //         body_text: [
-  //           ['João Silva', 'Valentina', 'Geniumed']
-  //         ]
-  //       }
-  //     }
-  //   ]
-  // },
-    // {
-    //   name: 'appointment_confirmation_doc',
-    //   category: 'UTILITY',
-    //   language: 'pt_BR',
-    //   components: [
-    //     {
-    //       type: 'BODY',
-    //       text: 'Perfeito, {{1}}! 🎉\nSua consulta com o {{2}} está confirmada para o dia {{3}}, às {{4}}.\n\n📍 Endereço / Link: {{5}}\n\nCaso precise remarcar, é só responder por aqui. 😊',
-    //       example: {
-    //         body_text: [
-    //           ['João Silva', 'Dr. Thiago Salati', '15/11/2025', '12:30', 'Rua da Alegria, 100']
-    //         ]
-    //       }
-    //     }
-    //   ]
-    // },
+  {
+    name: 'initial_welcome',
+    category: 'UTILITY',
+    language: 'pt_BR',
+    components: [
+      {
+        type: 'BODY',
+        text: 'Olá, {{1}}! 👋\nSou a {{2}}, assistente da clínica {{3}}.\n\nTentamos entrar em contato por telefone para confirmar sua consulta, mas não conseguimos falar com você.\n\nPodemos continuar o atendimento por aqui? 😊',
+        example: {
+          body_text: [
+            ['João Silva', 'Valentina', 'Geniumed']
+          ]
+        }
+      }
+    ]
+  },
+    {
+      name: 'appointment_confirmation_doc',
+      category: 'UTILITY',
+      language: 'pt_BR',
+      components: [
+        {
+          type: 'BODY',
+          text: 'Perfeito, {{1}}! 🎉\nSua consulta com o {{2}} está confirmada para o dia {{3}}, às {{4}}.\n\n📍 Endereço / Link: {{5}}\n\nCaso precise remarcar, é só responder por aqui. 😊',
+          example: {
+            body_text: [
+              ['João Silva', 'Dr. Thiago Salati', '15/11/2025', '12:30', 'Rua da Alegria, 100']
+            ]
+          }
+        }
+      ]
+    },
   {
     name: 'appointment_confirmation_treat',
     category: 'UTILITY',
@@ -56,22 +56,22 @@ const templates = [
       }
     ]
   },
-  // {
-  //   name: 'earlier_appointment_offer',
-  //   category: 'UTILITY',
-  //   language: 'pt_BR',
-  //   components: [
-  //     {
-  //       type: 'BODY',
-  //       text: 'Olá, {{1}}! 😊\nAqui é a {{2}}, da clínica {{3}}.\n\nConseguimos alguns horários disponíveis antes da data que você mencionou ({{4}}):\n\n👉 {{5}}\n👉 {{6}}\n\nAlgum desses horários funciona para você?\nSe preferir, posso reservar agora mesmo. 👍',
-  //       example: {
-  //         body_text: [
-  //           ['João Silva', 'Valentina', 'Geniumed', '15/11/2025', '13/11/2025 às 10:00', '14/11/2025 às 08:30']
-  //         ]
-  //       }
-  //     }
-  //   ]
-  // }
+  {
+    name: 'earlier_appointment_offer',
+    category: 'UTILITY',
+    language: 'pt_BR',
+    components: [
+      {
+        type: 'BODY',
+        text: 'Olá, {{1}}! 😊\nAqui é a {{2}}, da clínica {{3}}.\n\nConseguimos alguns horários disponíveis antes da data que você mencionou ({{4}}):\n\n👉 {{5}}\n👉 {{6}}\n\nAlgum desses horários funciona para você?\nSe preferir, posso reservar agora mesmo. 👍',
+        example: {
+          body_text: [
+            ['João Silva', 'Valentina', 'Geniumed', '15/11/2025', '13/11/2025 às 10:00', '14/11/2025 às 08:30']
+          ]
+        }
+      }
+    ]
+  }
 ];
 
 async function createTemplates(userId) {

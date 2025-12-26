@@ -68,7 +68,7 @@ r.get('/fn/get-conversation-flow', async (req, res) => {
       return res.status(500).json({ error: 'RETELL_API_KEY not configured' });
     }
 
-    const conversationFlowResponse = await client.conversationFlow.retrieve("conversation_flow_539ed10c4de3");
+    const conversationFlowResponse = await client.conversationFlow.retrieve("conversation_flow_6d07157731f7");
     res.json(conversationFlowResponse);
   } catch (error) {
     console.error('Error retrieving conversation flow:', error);

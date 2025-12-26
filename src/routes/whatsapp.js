@@ -10,6 +10,192 @@ import { agentManager } from '../services/agentManager.js';
 const router = Router();
 
 /**
+ * WhatsApp templates to create automatically
+ * These templates are created when a user connects their WhatsApp Business account
+ */
+const WHATSAPP_TEMPLATES = [
+  {
+    name: 'initial_welcome',
+    category: 'UTILITY',
+    language: 'pt_BR',
+    components: [
+      {
+        type: 'BODY',
+        text: 'Olá, {{1}}! 👋\nSou a {{2}}, assistente da clínica {{3}}.\n\nTentamos entrar em contato por telefone para confirmar sua consulta, mas não conseguimos falar com você.\n\nPodemos continuar o atendimento por aqui? 😊',
+        example: {
+          body_text: [
+            ['João Silva', 'Valentina', 'Geniumed']
+          ]
+        }
+      }
+    ]
+  },
+  {
+    name: 'appointment_confirmation_doc',
+    category: 'UTILITY',
+    language: 'pt_BR',
+    components: [
+      {
+        type: 'BODY',
+        text: 'Perfeito, {{1}}! 🎉\nSua consulta com o {{2}} está confirmada para o dia {{3}}, às {{4}}.\n\n📍 Endereço / Link: {{5}}\n\nCaso precise remarcar, é só responder por aqui. 😊',
+        example: {
+          body_text: [
+            ['João Silva', 'Dr. Thiago Salati', '15/11/2025', '12:30', 'Rua da Alegria, 100']
+          ]
+        }
+      }
+    ]
+  },
+  {
+    name: 'appointment_confirmation_treat',
+    category: 'UTILITY',
+    language: 'pt_BR',
+    components: [
+      {
+        type: 'BODY',
+        text: 'Perfeito, {{1}}! 🎉\nSeu atendimento com {{2}} está confirmado para o dia {{3}}, às {{4}}.\n\n📍 Endereço / Link: {{5}}\n\nCaso precise remarcar, é só responder por aqui. 😊',
+        example: {
+          body_text: [
+            ['João Silva', 'Tratamento Facial', '15/11/2025', '12:30', 'Rua da Alegria, 100']
+          ]
+        }
+      }
+    ]
+  },
+  {
+    name: 'earlier_appointment_offer',
+    category: 'UTILITY',
+    language: 'pt_BR',
+    components: [
+      {
+        type: 'BODY',
+        text: 'Olá, {{1}}! 😊\nAqui é a {{2}}, da clínica {{3}}.\n\nConseguimos alguns horários disponíveis antes da data que você mencionou ({{4}}):\n\n👉 {{5}}\n👉 {{6}}\n\nAlgum desses horários funciona para você?\nSe preferir, posso reservar agora mesmo. 👍',
+        example: {
+          body_text: [
+            ['João Silva', 'Valentina', 'Geniumed', '15/11/2025', '13/11/2025 às 10:00', '14/11/2025 às 08:30']
+          ]
+        }
+      }
+    ]
+  }
+];
+
+/**
+ * Automatically create WhatsApp templates for a user after they connect their account
+ * This runs in the background and doesn't block the connection response
+ * @param {string} userId - User ID
+ */
+async function createWhatsAppTemplatesForUser(userId) {
+  try {
+    log.info(`Starting automatic template creation for user ${userId}...`);
+
+    // Get existing templates to avoid duplicates
+    let existingTemplates = [];
+    try {
+      const templatesResponse = await whatsappBusinessService.getAllTemplates(userId, {
+        limit: 100
+      });
+      existingTemplates = templatesResponse.data || [];
+      log.info(`Found ${existingTemplates.length} existing templates`);
+    } catch (error) {
+      log.warn('Could not fetch existing templates, will attempt to create all:', error.message);
+      // Continue anyway - if template exists, API will return an error we can handle
+    }
+
+    const existingTemplateNames = new Set(
+      existingTemplates.map(t => t.name?.toLowerCase())
+    );
+
+    const results = [];
+    let createdCount = 0;
+    let skippedCount = 0;
+    let failedCount = 0;
+
+    for (const template of WHATSAPP_TEMPLATES) {
+      try {
+        // Check if template already exists
+        if (existingTemplateNames.has(template.name.toLowerCase())) {
+          log.info(`Template "${template.name}" already exists, skipping...`);
+          results.push({
+            name: template.name,
+            success: true,
+            skipped: true,
+            reason: 'Template already exists'
+          });
+          skippedCount++;
+          continue;
+        }
+
+        log.info(`Creating template: ${template.name}`);
+        
+        const result = await whatsappBusinessService.createTemplate(userId, template);
+        
+        log.info(`✅ Template "${template.name}" created successfully!`, {
+          templateId: result.templateId,
+          status: result.status
+        });
+        
+        results.push({
+          name: template.name,
+          success: true,
+          templateId: result.templateId,
+          status: result.status
+        });
+        createdCount++;
+
+        // Wait between requests to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+      } catch (error) {
+        // Check if error is because template already exists
+        const errorMessage = error.message?.toLowerCase() || '';
+        if (errorMessage.includes('already exists') || 
+            errorMessage.includes('duplicate') ||
+            errorMessage.includes('name already in use')) {
+          log.info(`Template "${template.name}" already exists (detected from error), skipping...`);
+          results.push({
+            name: template.name,
+            success: true,
+            skipped: true,
+            reason: 'Template already exists'
+          });
+          skippedCount++;
+        } else {
+          log.error(`❌ Failed to create template "${template.name}":`, error.message);
+          results.push({
+            name: template.name,
+            success: false,
+            error: error.message
+          });
+          failedCount++;
+        }
+      }
+    }
+
+    // Summary log
+    log.info('='.repeat(60));
+    log.info('AUTOMATIC TEMPLATE CREATION SUMMARY');
+    log.info('='.repeat(60));
+    log.info(`✅ Created: ${createdCount}/${WHATSAPP_TEMPLATES.length} templates`);
+    log.info(`⏭️  Skipped (already exist): ${skippedCount}/${WHATSAPP_TEMPLATES.length} templates`);
+    if (failedCount > 0) {
+      log.info(`❌ Failed: ${failedCount}/${WHATSAPP_TEMPLATES.length} templates`);
+    }
+    log.info('='.repeat(60));
+    log.info('📋 Note: Templates are submitted for Meta/WhatsApp review.');
+    log.info('   It may take 24-48 hours for templates to be approved.');
+    log.info('='.repeat(60));
+
+    return results;
+
+  } catch (error) {
+    log.error('Fatal error during automatic template creation:', error);
+    // Don't throw - this is a background process
+    return [];
+  }
+}
+
+/**
  * Get WhatsApp Business connection status
  * GET /api/whatsapp/status
  */
@@ -99,6 +285,13 @@ router.post('/connect', verifyJWT, async (req, res) => {
       phoneNumber: phone_number,
       displayPhoneNumber: display_phone_number,
       verified: verified || false
+    });
+
+    // Automatically create WhatsApp templates after successful connection
+    // Run in background - don't block the response
+    createWhatsAppTemplatesForUser(userId).catch(error => {
+      log.error('Failed to create WhatsApp templates after connection:', error);
+      // Don't throw - connection was successful, templates can be created later
     });
 
     res.json({
@@ -951,8 +1144,32 @@ router.post('/webhook', async (req, res) => {
                                   .eq('id', ownerId)
                                   .single();
 
+                              // Get available slots from existing chat if it exists
+                              let slotVariables = {};
+                              // Use chat object which should have agent_variables from the whatsapp_chats table
+                              if (chat?.agent_variables) {
+                                const chatVars = chat.agent_variables;
+                                if (chatVars.slot_1) slotVariables.slot_1 = String(chatVars.slot_1);
+                                if (chatVars.slot_1_date) slotVariables.slot_1_date = String(chatVars.slot_1_date);
+                                if (chatVars.slot_1_time) slotVariables.slot_1_time = String(chatVars.slot_1_time);
+                                if (chatVars.slot_2) slotVariables.slot_2 = String(chatVars.slot_2);
+                                if (chatVars.slot_2_date) slotVariables.slot_2_date = String(chatVars.slot_2_date);
+                                if (chatVars.slot_2_time) slotVariables.slot_2_time = String(chatVars.slot_2_time);
+                                if (chatVars.available_slots) slotVariables.available_slots = String(chatVars.available_slots);
+                                if (chatVars.suggested_date) slotVariables.suggested_date = String(chatVars.suggested_date);
+                              }
+                              
+                              if (Object.keys(slotVariables).length > 0) {
+                                log.info('Including available slots in Retell chat (followup):', {
+                                  slot_1: slotVariables.slot_1,
+                                  slot_2: slotVariables.slot_2,
+                                  available_slots: slotVariables.available_slots
+                                });
+                              }
+
                                 const chatVariables = {
                                   ...(lead?.agent_variables || {}),
+                                  ...slotVariables, // Include available slots from WhatsApp chat
                                   chat_type: 'followup',
                                   name: String(lead?.name || 'Cliente'),
                                   lead_id: String(lead?.id || ''),
@@ -1093,8 +1310,38 @@ router.post('/webhook', async (req, res) => {
                               .eq('id', ownerId)
                               .single();
 
+                            // Get available slots from existing chat if it exists
+                            // First try to get from existingChat (if found earlier), otherwise query for it
+                            let slotVariables = {};
+                            let chatWithSlots = existingChat;
+                            
+                            if (!chatWithSlots && waPhone) {
+                              // Query for existing chat to get slot information
+                              const { data: chatData } = await supa
+                                .from('whatsapp_chats')
+                                .select('agent_variables')
+                                .eq('wa_phone', waPhone)
+                                .order('last_message_at', { ascending: false })
+                                .limit(1)
+                                .maybeSingle();
+                              chatWithSlots = chatData;
+                            }
+                            
+                            if (chatWithSlots?.agent_variables) {
+                              const chatVars = chatWithSlots.agent_variables;
+                              if (chatVars.slot_1) slotVariables.slot_1 = String(chatVars.slot_1);
+                              if (chatVars.slot_1_date) slotVariables.slot_1_date = String(chatVars.slot_1_date);
+                              if (chatVars.slot_1_time) slotVariables.slot_1_time = String(chatVars.slot_1_time);
+                              if (chatVars.slot_2) slotVariables.slot_2 = String(chatVars.slot_2);
+                              if (chatVars.slot_2_date) slotVariables.slot_2_date = String(chatVars.slot_2_date);
+                              if (chatVars.slot_2_time) slotVariables.slot_2_time = String(chatVars.slot_2_time);
+                              if (chatVars.available_slots) slotVariables.available_slots = String(chatVars.available_slots);
+                              if (chatVars.suggested_date) slotVariables.suggested_date = String(chatVars.suggested_date);
+                            }
+
                             const chatVariables = {
                               ...(lead?.agent_variables || {}),
+                              ...slotVariables, // Include available slots from WhatsApp chat
                               chat_type: lead ? 'welcome' : 'other',
                               name: String(lead?.name || 'Cliente'),
                               lead_id: String(lead?.id || ''),
@@ -1131,7 +1378,47 @@ router.post('/webhook', async (req, res) => {
                           fetch('http://localhost:7243/ingest/fa704248-e3dd-4b0a-ab9f-643803e5688c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'whatsapp.js:1013',message:'Creating new chat record',data:{ownerId,leadId:chatLeadId,waPhone,hasLead:!!lead,phoneNumber},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
                           // #endregion
                           
-                          const { data: newChat, error: insertError } = await supa
+                          // Check for existing active chat for this phone number
+                          const { data: existingChat } = await supa
+                            .from('whatsapp_chats')
+                            .select('id')
+                            .eq('wa_phone', waPhone)
+                            .in('status', ['open', 'pending_response'])
+                            .single();
+
+                          let newChat;
+                          if (existingChat) {
+                            // Update existing active chat
+                            const { data: updatedChat, error: updateError } = await supa
+                              .from('whatsapp_chats')
+                              .update({
+                                lead_id: chatLeadId,
+                                retell_chat_id: retellChatId,
+                                agent_id: chatAgent.retell_agent_id,
+                                status: 'open',
+                                metadata: {
+                                  chat_type: lead ? 'welcome' : 'other',
+                                  service_type: serviceType
+                                },
+                                last_message_at: new Date().toISOString()
+                              })
+                              .eq('id', existingChat.id)
+                              .select()
+                              .single();
+
+                            if (updateError) {
+                              log.error('Error updating whatsapp_chats record:', updateError.message);
+                              
+                              // #region agent log
+                              fetch('http://localhost:7243/ingest/fa704248-e3dd-4b0a-ab9f-643803e5688c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'whatsapp.js:1032',message:'Chat update error',data:{error:updateError.message,leadId:chatLeadId,waPhone},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+                              // #endregion
+                              
+                              return;
+                            }
+                            newChat = updatedChat;
+                          } else {
+                            // Insert new chat record
+                            const { data: insertedChat, error: insertError } = await supa
                             .from('whatsapp_chats')
                             .insert({
                               owner_id: ownerId,
@@ -1157,6 +1444,8 @@ router.post('/webhook', async (req, res) => {
                             // #endregion
                             
                             return;
+                            }
+                            newChat = insertedChat;
                           }
 
                           chat = newChat;
@@ -1244,8 +1533,32 @@ router.post('/webhook', async (req, res) => {
                                 .eq('id', ownerId)
                                 .single();
 
+                              // Get available slots from existing chat if it exists
+                              let slotVariables = {};
+                              // Use chat object which should have agent_variables from the whatsapp_chats table
+                              if (chat?.agent_variables) {
+                                const chatVars = chat.agent_variables;
+                                if (chatVars.slot_1) slotVariables.slot_1 = String(chatVars.slot_1);
+                                if (chatVars.slot_1_date) slotVariables.slot_1_date = String(chatVars.slot_1_date);
+                                if (chatVars.slot_1_time) slotVariables.slot_1_time = String(chatVars.slot_1_time);
+                                if (chatVars.slot_2) slotVariables.slot_2 = String(chatVars.slot_2);
+                                if (chatVars.slot_2_date) slotVariables.slot_2_date = String(chatVars.slot_2_date);
+                                if (chatVars.slot_2_time) slotVariables.slot_2_time = String(chatVars.slot_2_time);
+                                if (chatVars.available_slots) slotVariables.available_slots = String(chatVars.available_slots);
+                                if (chatVars.suggested_date) slotVariables.suggested_date = String(chatVars.suggested_date);
+                              }
+                              
+                              if (Object.keys(slotVariables).length > 0) {
+                                log.info('Including available slots in Retell chat (error recovery):', {
+                                  slot_1: slotVariables.slot_1,
+                                  slot_2: slotVariables.slot_2,
+                                  available_slots: slotVariables.available_slots
+                                });
+                              }
+
                               const chatVariables = {
                                 ...(lead?.agent_variables || {}),
+                                ...slotVariables, // Include available slots from WhatsApp chat
                                 chat_type: 'other',
                                 name: String(lead?.name || 'Cliente'),
                                 lead_id: String(lead?.id || ''),
@@ -1322,11 +1635,17 @@ router.post('/webhook', async (req, res) => {
                               }
                             } catch (retryError) {
                               log.error('Failed to create new Retell chat on retry:', retryError.message);
-                              await whatsappBusinessService.sendTextMessage(
-                                ownerId,
-                                phoneNumber,
-                                'Desculpe, estou tendo dificuldades técnicas. Por favor, tente novamente em alguns instantes. 🙏'
-                              );
+                              // Don't try to send another message if the previous one failed - it will likely fail too
+                              try {
+                                await whatsappBusinessService.sendTextMessage(
+                                  ownerId,
+                                  phoneNumber,
+                                  'Desculpe, estou tendo dificuldades técnicas. Por favor, tente novamente em alguns instantes. 🙏'
+                                );
+                              } catch (fallbackError) {
+                                log.error('Failed to send fallback message:', fallbackError.message);
+                                // Silently fail - we've already logged the error
+                              }
                             }
                           }
                         } else {

@@ -53,20 +53,54 @@ export function getEndOfDaySaoPaulo(date = null) {
 }
 
 /**
- * Format date in São Paulo timezone as ISO string
- * @param {Date} date - Date to format
- * @returns {string}
+ * Format date in São Paulo timezone as ISO string with timezone offset
+ * This preserves the São Paulo local time when saving to TIMESTAMPTZ columns
+ * The date parameter should represent a time calculated in São Paulo timezone context
+ * @param {Date} date - Date object representing a time in São Paulo timezone context
+ * @returns {string} - ISO string with São Paulo timezone offset (e.g., "2025-12-25T09:34:00-03:00")
  */
 export function toIsoStringSaoPaulo(date) {
-  return toSaoPauloTime(date).toISOString();
+  // Format the date components as they appear in São Paulo timezone
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+  
+  const parts = formatter.formatToParts(date);
+  const year = parts.find(p => p.type === 'year').value;
+  const month = parts.find(p => p.type === 'month').value;
+  const day = parts.find(p => p.type === 'day').value;
+  const hour = parts.find(p => p.type === 'hour').value;
+  const minute = parts.find(p => p.type === 'minute').value;
+  const second = parts.find(p => p.type === 'second').value;
+  
+  // Calculate São Paulo timezone offset for this specific date
+  // Create a date in UTC and in São Paulo timezone, then calculate the difference
+  const utcTime = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }));
+  const saoPauloTime = new Date(date.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  const offsetMs = saoPauloTime.getTime() - utcTime.getTime();
+  const offsetHours = Math.floor(Math.abs(offsetMs) / (1000 * 60 * 60));
+  const offsetMinutes = Math.floor((Math.abs(offsetMs) % (1000 * 60 * 60)) / (1000 * 60));
+  const offsetSign = offsetMs >= 0 ? '+' : '-';
+  const offset = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
+  
+  // Return ISO string with São Paulo timezone offset
+  // This tells PostgreSQL: "This timestamp represents 09:34:00 in São Paulo timezone"
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}${offset}`;
 }
 
 /**
- * Get current ISO string in São Paulo timezone
- * @returns {string}
+ * Get current ISO string in São Paulo timezone with offset
+ * @returns {string} - ISO string with São Paulo timezone offset
  */
 export function getIsoStringNow() {
-  return getNowInSaoPaulo().toISOString();
+  return toIsoStringSaoPaulo(getNowInSaoPaulo());
 }
 
 /**

@@ -332,6 +332,21 @@ class AgentManager {
 
           chatAgent = dbChatAgent;
           log.info(`Successfully created WhatsApp chat agent: ${chatAgent.id}`);
+          
+          // Set as default chat agent if owner doesn't have one
+          const { data: currentUserForChat } = await supa
+            .from('users')
+            .select('default_chat_agent_id')
+            .eq('id', ownerId)
+            .single();
+
+          if (!currentUserForChat?.default_chat_agent_id) {
+            await supa
+              .from('users')
+              .update({ default_chat_agent_id: chatAgent.id })
+              .eq('id', ownerId);
+            log.info(`Set chat agent ${chatAgent.id} as default chat agent for owner ${ownerId}`);
+          }
         } catch (chatAgentError) {
           log.error('Error auto-creating WhatsApp chat agent:', chatAgentError);
           // Don't fail the voice agent creation if chat agent creation fails
@@ -339,7 +354,7 @@ class AgentManager {
         }
       }
 
-      // Set as default agent if owner doesn't have one
+      // Set as default voice agent if owner doesn't have one
       const { data: currentUser } = await supa
         .from('users')
         .select('default_agent_id')
@@ -589,21 +604,17 @@ class AgentManager {
             resourceType
           );
           
-          // Check if the slot is in a different year
           const currentYear = now.getFullYear();
           const slotYear = targetDate.getFullYear();
           const includeYear = slotYear !== currentYear;
           
-          // Format all available slots for this date
           if (slotsForTargetDate && slotsForTargetDate.length > 0) {
             const formattedSlots = slotsForTargetDate.map(slot => {
               return formatHumanizedDateTime(slot, includeYear);
             });
             
-            // Get the date part (without time) for the message
             const dateOnly = formatHumanizedDateTime(targetDate, includeYear).split(' às ')[0];
           
-            // Present all available slots on that date
             if (formattedSlots.length === 1) {
               availableTimeMessage = `Encontrei um horário disponível para você no dia ${formattedSlots[0]}. Posso confirmar esse horário para você?`;
             } else {
@@ -685,7 +696,6 @@ class AgentManager {
           availableTimeMessage = `Encontrei um horário disponível para você no dia ${humanizedDateTime}. Posso confirmar esse horário ou verificar outras opções que funcionem melhor para você.`;
         } catch (error) {
           log.warn('Could not fetch real availability, using generic message:', error);
-          availableTimeMessage = 'Estamos com horários disponíveis nas próximas semanas. Posso agendar para a melhor data que funcionar para você.';
         }
       }
 
@@ -1037,27 +1047,43 @@ class AgentManager {
       let appointmentsQuery;
       
       if (resourceType === 'user') {
-        appointmentsQuery = supa
+        const { data: appointments, error } = await supa
           .from('appointments')
           .select('start_at, end_at')
           .eq('owner_id', resourceId)
           .gte('start_at', now.toISOString())
           .lte('start_at', endDate.toISOString())
           .eq('status', 'scheduled');
+        
+        if (!error && appointments) {
+          existingAppointments = appointments;
+        }
       } else {
-        appointmentsQuery = supa
+        // For medical clinic (doctor-level) - use resource_type and resource_id (polymorphic fields)
+        // Query for appointments with resource_type/resource_id
+        const { data: appointments, error } = await supa
           .from('appointments')
           .select('start_at, end_at')
-          .eq('doctor_id', resourceId)
+          .eq('resource_type', resourceType)
+          .eq('resource_id', resourceId)
           .gte('start_at', now.toISOString())
           .lte('start_at', endDate.toISOString())
           .eq('status', 'scheduled');
-      }
-      
-      const { data: appointments, error } = await appointmentsQuery;
-      
-      if (!error && appointments) {
-        existingAppointments = appointments;
+        
+        if (!error && appointments) {
+          existingAppointments = appointments;
+          if (existingAppointments.length > 0) {
+            log.info(`Found ${existingAppointments.length} existing appointments for ${resourceType} ${resourceId}`, {
+              total: existingAppointments.length,
+              appointments: existingAppointments.map(a => ({
+                start: a.start_at,
+                end: a.end_at
+              }))
+            });
+          }
+        } else if (error) {
+          log.warn(`Error fetching appointments for ${resourceType} ${resourceId}:`, error.message);
+        }
       }
     } catch (error) {
       log.warn('Could not fetch existing appointments:', error);
@@ -1073,8 +1099,6 @@ class AgentManager {
       
       // Get date string in São Paulo timezone to match the format stored in unavailableDates
       const dateString = getDateStringInTimezone(checkDate, 'America/Sao_Paulo');
-      
-      log.debug(`Checking date: ${dateString}, is unavailable: ${unavailableDates.has(dateString)}`);
       
       // Skip if date is specifically marked as unavailable
       if (unavailableDates.has(dateString)) {
@@ -1105,12 +1129,22 @@ class AgentManager {
           }
 
           // Check if this time slot conflicts with existing appointments
+          // We need to check if the slot would overlap with any appointment
+          // A slot conflicts if: slotStartTime is within appointment OR appointment overlaps with slot
           const hasConflict = existingAppointments.some(appointment => {
             const appointmentStart = new Date(appointment.start_at);
             const appointmentEnd = new Date(appointment.end_at);
             
-            // Check if the slot time falls within an existing appointment
-            return slotStartTime >= appointmentStart && slotStartTime < appointmentEnd;
+            // Calculate slot end time (assuming 30-minute default, but we should use actual duration)
+            // For now, check if slot start time falls within appointment OR if appointment overlaps slot start
+            const conflicts = (slotStartTime >= appointmentStart && slotStartTime < appointmentEnd) ||
+                   (appointmentStart < slotStartTime && appointmentEnd > slotStartTime);
+            
+            if (conflicts) {
+              log.debug(`Slot ${slotStartTime.toISOString()} conflicts with appointment ${appointmentStart.toISOString()} - ${appointmentEnd.toISOString()}`);
+            }
+            
+            return conflicts;
           });
 
           if (!hasConflict) {
@@ -1119,6 +1153,8 @@ class AgentManager {
             // #endregion
             // Found an available slot!
             slots.push(slotStartTime);
+          } else {
+            log.debug(`Slot ${slotStartTime.toISOString()} on ${dateString} is not available (conflicts with existing appointment)`);
           }
         }
       }
@@ -1181,19 +1217,25 @@ class AgentManager {
           .lte('start_at', endOfDay.toISOString())
           .eq('status', 'scheduled');
       } else {
-        appointmentsQuery = supa
+        // For medical clinic (doctor-level) - use resource_type and resource_id (polymorphic fields)
+        // Query for appointments with resource_type/resource_id
+        const { data: appointments, error } = await supa
           .from('appointments')
           .select('start_at, end_at')
-          .eq('doctor_id', resourceId)
+          .eq('resource_type', resourceType)
+          .eq('resource_id', resourceId)
           .gte('start_at', startOfDay.toISOString())
           .lte('start_at', endOfDay.toISOString())
           .eq('status', 'scheduled');
-      }
-      
-      const { data: appointments, error } = await appointmentsQuery;
-      
-      if (!error && appointments) {
-        existingAppointments = appointments;
+        
+        if (!error && appointments) {
+          existingAppointments = appointments;
+          log.info(`Found ${existingAppointments.length} existing appointments for ${resourceType} ${resourceId} on ${normalizedTargetDate}`, {
+            total: existingAppointments.length
+          });
+        } else if (error) {
+          log.warn(`Error fetching appointments for ${resourceType} ${resourceId} on ${normalizedTargetDate}:`, error.message);
+        }
       }
     } catch (error) {
       log.warn('Could not fetch existing appointments for target date:', error);
@@ -1211,8 +1253,14 @@ class AgentManager {
         const appointmentEnd = new Date(appointment.end_at);
         
         // Check if the slot time falls within an existing appointment
-        return slotStartTime >= appointmentStart && slotStartTime < appointmentEnd;
+        // Also check if appointment starts before slot but ends after slot start (overlap)
+        return (slotStartTime >= appointmentStart && slotStartTime < appointmentEnd) ||
+               (appointmentStart < slotStartTime && appointmentEnd > slotStartTime);
       });
+      
+      if (hasConflict) {
+        log.debug(`Slot ${slotStartTime.toISOString()} conflicts with existing appointment`);
+      }
       
       if (!hasConflict) {
         // Found an available slot!
@@ -1252,32 +1300,45 @@ class AgentManager {
     
     let existingAppointments = [];
     try {
-      let appointmentsQuery;
-      
       if (resourceType === 'user') {
         // For beauty clinic (user-level), get all appointments for this owner
-        appointmentsQuery = supa
+        const { data: appointments, error } = await supa
           .from('appointments')
           .select('start_at, end_at')
           .eq('owner_id', resourceId)
           .gte('start_at', now.toISOString())
           .lte('start_at', endDate.toISOString())
           .eq('status', 'scheduled');
+        
+        if (!error && appointments) {
+          existingAppointments = appointments;
+        }
       } else {
-        // For medical clinic (doctor-level)
-        appointmentsQuery = supa
+        // For medical clinic (doctor-level) - use resource_type and resource_id (polymorphic fields)
+        // Query for appointments with resource_type/resource_id
+        const { data: appointments, error } = await supa
           .from('appointments')
           .select('start_at, end_at')
-          .eq('doctor_id', resourceId)
+          .eq('resource_type', resourceType)
+          .eq('resource_id', resourceId)
           .gte('start_at', now.toISOString())
           .lte('start_at', endDate.toISOString())
           .eq('status', 'scheduled');
-      }
-      
-      const { data: appointments, error } = await appointmentsQuery;
-      
-      if (!error && appointments) {
-        existingAppointments = appointments;
+        
+        if (!error && appointments) {
+          existingAppointments = appointments;
+          if (existingAppointments.length > 0) {
+            log.info(`Found ${existingAppointments.length} existing appointments for ${resourceType} ${resourceId}`, {
+              total: existingAppointments.length,
+              appointments: existingAppointments.map(a => ({
+                start: a.start_at,
+                end: a.end_at
+              }))
+            });
+          }
+        } else if (error) {
+          log.warn(`Error fetching appointments for ${resourceType} ${resourceId}:`, error.message);
+        }
       }
     } catch (error) {
       log.warn('Could not fetch existing appointments:', error);
@@ -1293,8 +1354,6 @@ class AgentManager {
       
       // Get date string in São Paulo timezone to match the format stored in unavailableDates
       const dateString = getDateStringInTimezone(checkDate, 'America/Sao_Paulo');
-      
-      log.debug(`Checking date: ${dateString}, is unavailable: ${unavailableDates.has(dateString)}`);
       
       // Skip if date is specifically marked as unavailable
       if (unavailableDates.has(dateString)) {
@@ -1324,7 +1383,9 @@ class AgentManager {
             const appointmentEnd = new Date(appointment.end_at);
             
             // Check if the slot time falls within an existing appointment
-            return slotStartTime >= appointmentStart && slotStartTime < appointmentEnd;
+            // Also check if appointment starts before slot but ends after slot start (overlap)
+            return (slotStartTime >= appointmentStart && slotStartTime < appointmentEnd) ||
+                   (appointmentStart < slotStartTime && appointmentEnd > slotStartTime);
           });
 
           if (!hasConflict) {

@@ -46,7 +46,7 @@
                     }
                 },
                 {
-                    "destination_node_id": "node-1765110986786",
+                    "destination_node_id": "node-1757798419221",
                     "id": "edge-1757356852686",
                     "transition_condition": {
                         "type": "prompt",
@@ -238,7 +238,7 @@
             ],
             "instruction": {
                 "type": "prompt",
-                "text": "CRITICAL: This node is ONLY for offering to check for earlier DATE availability (different day). The user has NOT agreed to any appointment yet - they're asking for a different date. DO NOT say anything about confirming appointments.\n\nIMPORTANT DISTINCTION:\n- This node is for EARLIER DATE requests (different day)\n- If user asks for EARLIER TIME on same day, they should go to a different node that checks availability for earlier times on the same date\n\nWhen user expresses that the proposed date is too far or asks for an earlier DATE (different day), respond with:\n\nStep 1 - Acknowledge empathetically:\n\"Ah, entendi, {{name}}! Olha, a agenda do {{doctor_name}} tá realmente bem cheia...\"\n\nStep 2 - Offer to check for earlier DATE:\n\"...mas eu posso tentar encaixar você antes dessa data.\"\n\nStep 3 - Give SPECIFIC follow-up timeframe:\n\"Me dá só um tempinho e eu já te retorno pelo WhatsApp entre hoje e amanhã, tudo bem?\"\n\nCRITICAL: Always include the SPECIFIC timeframe \"entre hoje e amanhã\" - this is mandatory.\n\nHANDLING USER QUESTIONS:\nAfter delivering the callback offer, if user asks questions (about telemedicine, location, payment, etc.), you MUST:\n1. Answer their question completely FIRST\n2. Then acknowledge their agreement (if they agreed to wait)\n3. Reiterate the SPECIFIC timeframe: \"Vou te retornar pelo WhatsApp entre hoje e amanhã\"\n4. Proceed naturally - don't rush to closing\n\nExample flow if user asks about telemedicine after agreeing:\n- User: \"Está bom, pode ser. E ele atende online?\"\n- Agent: \"Sim! {{doctor_name}} atende presencialmente em {{doctor_city}}, mas também faz consultas por telemedicina. Você pode ser atendido online sem problemas, caso prefira. <break time='400ms'/> Perfeito, então vou tentar conseguir um encaixe antes dessa data e já te retorno pelo WhatsApp entre hoje e amanhã, combinado?\"\n\nIMPORTANT: After delivering this message, WAIT for user's response. DO NOT confirm any appointment. Only proceed to confirmation AFTER user explicitly agrees to a specific date."
+                "text": "\nIMPORTANT DISTINCTION:\n- This node is for EARLIER DATE requests (different day)\n- If user asks for EARLIER TIME on same day, they should go to a different node that checks availability for earlier times on the same date\n\nWhen user expresses that the proposed date is too far or asks for an earlier DATE (different day), respond with:\n\nStep 1 - Acknowledge empathetically:\n\"Ah, entendi, {{name}}! Olha, a agenda do {{doctor_name}} tá realmente bem cheia...\"\n\nStep 2 - Offer to check for earlier DATE:\n\"...mas eu posso tentar encaixar você antes dessa data.\"\n\nStep 3 - Give SPECIFIC follow-up timeframe:\n\"Me dá só um tempinho e eu já te retorno pelo WhatsApp entre hoje e amanhã, tudo bem?\"\n\nCRITICAL: Always include the SPECIFIC timeframe \"entre hoje e amanhã\" - this is mandatory.\n\nHANDLING USER QUESTIONS:\nAfter delivering the callback offer, if user asks questions (about telemedicine, location, payment, etc.), you MUST:\n1. Answer their question completely FIRST\n2. Then acknowledge their agreement (if they agreed to wait)\n3. Reiterate the SPECIFIC timeframe: \"Vou te retornar pelo WhatsApp entre hoje e amanhã\"\n4. Proceed naturally - don't rush to closing\n"
             },
             "name": "111",
             "edges": [
@@ -301,7 +301,7 @@
             "name": "444",
             "edges": [
                 {
-                    "destination_node_id": "node-1764010043469",
+                    "destination_node_id": "node-1766515594441",
                     "id": "edge-1757807838768",
                     "transition_condition": {
                         "type": "prompt",
@@ -371,7 +371,7 @@
             },
             "instruction": {
                 "type": "prompt",
-                "text": "CRITICAL: ONLY USE THIS NODE WHEN USER HAS EXPLICITLY AGREED TO A SPECIFIC DATE/SLOT\n\nThis node should ONLY be reached when:\n- User has explicitly agreed to proceed with a consultation on a specific date/time\n- User has said \"pode\", \"sim\", \"quero\",  \"pode confirmar\" in response to a date    offer  \n- User has chosen a specific slot from    the available options      \n     \nDO NOT use this node when: \n- User is asking about alternatives (use  node \"111\" instead) \n- User is expressing concerns or doubts  (use node \"111\" instead)     \n\n- User hasn't explicitly agreed to any date yet\n\nHANDLE SHORT ACKNOWLEDGMENTS:\n- If user says \"Pode\" / \"Sim\" / \"Claro\" / \"Muito obrigado\" → These are YES signals\n- Briefly acknowledge (\"Ótimo!\") and IMMEDIATELY proceed with confirmation\n- Don't wait for more confirmation\n\nSTEP 1 - Confirm appointment:\n\"Ótimo, {{name}}! Seu agendamento já está confirmado. Vou enviar a confirmação pelo WhatsApp agora mesmo, ok?\"\n\nWait for user's response.\n\nSTEP 2 - Ask if there's anything else:\nAfter user responds to confirmation, ask:\n\"Tem mais alguma coisa que eu possa te ajudar? <break time='400ms'/>\"\n\nWait for user's response.\n\n- IF user says YES or asks a question or needs help:\n  → Answer their question completely and helpfully\n  → After answering, ask again: \"Tem mais alguma coisa que eu possa te ajudar?\"\n  → Continue this loop until user says no or indicates they're done\n  → Then proceed to final closing message\n\n\n\nCRITICAL RULES:\n- ALWAYS ask \"Tem mais alguma coisa que eu possa te ajudar?\" after confirming appointment\n- NEVER skip this question\n- NEVER say goodbye without asking this question first\n- Only move to final node after user indicates they don't need anything else"
+                "text": "CRITICAL: ONLY USE THIS NODE WHEN USER HAS EXPLICITLY AGREED TO A SPECIFIC DATE/SLOT\n\nThis node should ONLY be reached when:\n- User has explicitly agreed to proceed with a consultation on a specific date/time\n- User has said \"pode\", \"sim\", \"quero\",  \"pode confirmar\" in response to a date    offer  \n- User has chosen a specific slot from    the available options      \n     \nDO NOT use this node when: \n- User is asking about alternatives (use  node \"111\" instead) \n- User is expressing concerns or doubts  (use node \"111\" instead)     \n\n- User hasn't explicitly agreed to any date yet\n\nHANDLE SHORT ACKNOWLEDGMENTS:\n- If user says \"Pode\" / \"Sim\" / \"Claro\" / \"Muito obrigado\" → These are YES signals\n- Briefly acknowledge (\"Ótimo!\") and IMMEDIATELY proceed with confirmation\n- Don't wait for more confirmation\n\nSTEP 1 - Confirm appointment:\n\"Ótimo, {{name}}! Seu agendamento já está confirmado. Vou enviar a confirmação pelo WhatsApp agora mesmo, ok?\"\n\nWait for user's response.\n\nSTEP 2 - Ask if there's anything else:\nAfter user responds to confirmation, ask:\n\"Tem mais alguma coisa que eu possa te ajudar? <break time='400ms'/>\"\n\nWait for user's response.\n\n- IF user says YES or asks a question or needs help:\n  → Answer their question completely and helpfully\n  → After answering, ask again: \"Tem mais alguma coisa que eu possa te ajudar?\"\n  → Continue this loop until user says no or indicates they're done\n  → Then proceed to final closing message\n\n\n\nCRITICAL RULES:\n- ALWAYS ask \"Tem mais alguma coisa que eu possa te ajudar?\" after confirming appointment\n- NEVER skip this question\n- NEVER say goodbye without asking this question first\n- Only move to final node after user indicates they don't need anything elseCRITICAL: ONLY USE THIS NODE WHEN USER HAS EXPLICITLY AGREED TO A SPECIFIC DATE/SLOT\n\nThis node should ONLY be reached when:\n- User has explicitly agreed to proceed with a consultation on a specific date/time\n- User has said \"pode\", \"sim\", \"quero\",  \"pode confirmar\" in response to a date    offer  \n- User has chosen a specific slot from    the available options      \n     \nDO NOT use this node when: \n- User is asking about alternatives (use  node \"111\" instead) \n- User is expressing concerns or doubts  (use node \"111\" instead)     \n\n- User hasn't explicitly agreed to any date yet\n\nHANDLE SHORT ACKNOWLEDGMENTS:\n- If user says \"Pode\" / \"Sim\" / \"Claro\" / \"Muito obrigado\" → These are YES signals\n- Briefly acknowledge (\"Ótimo!\") and IMMEDIATELY proceed with confirmation\n- Don't wait for more confirmation\n\nSTEP 1 - Confirm appointment:\n\"Ótimo, {{name}}! Seu agendamento já está confirmado. Vou enviar a confirmação pelo WhatsApp agora mesmo, ok?\"\n\nWait for user's response.\n\nSTEP 2 - Ask if there's anything else:\nAfter user responds to confirmation, ask:\n\"Tem mais alguma coisa que eu possa te ajudar? <break time='400ms'/>\"\n\nWait for user's response.\n\n- IF user says YES or asks a question or needs help:\n  → Answer their question completely and helpfully\n  → After answering, ask again: \"Tem mais alguma coisa que eu possa te ajudar?\"\n  → Continue this loop until user says no or indicates they're done\n  → Then proceed to final closing message\n\n\n\nCRITICAL RULES:\n- ALWAYS ask \"Tem mais alguma coisa que eu possa te ajudar?\" after confirming appointment\n- NEVER skip this question\n- NEVER say goodbye without asking this question first\n- Only move to final node after user indicates they don't need anything else"
             }
         },
         {
@@ -608,40 +608,6 @@
             "wait_for_result": true
         },
         {
-            "name": "Logic Split Node",
-            "edges": [
-                {
-                    "destination_node_id": "node-1757798419221",
-                    "id": "edge-1765111002649-bzdhnsogb",
-                    "transition_condition": {
-                        "type": "equation",
-                        "equations": [
-                            {
-                                "left": "{{script_style}",
-                                "operator": "==",
-                                "right": "copy"
-                            }
-                        ],
-                        "operator": "||"
-                    }
-                }
-            ],
-            "id": "node-1765110986786",
-            "else_edge": {
-                "destination_node_id": "node-1761642714360",
-                "id": "edge-1765110986786-h4m4nkz03",
-                "transition_condition": {
-                    "type": "prompt",
-                    "prompt": "Else"
-                }
-            },
-            "type": "branch",
-            "display_position": {
-                "x": 1874.9758232827553,
-                "y": -330.66316818262595
-            }
-        },
-        {
             "name": "Conversation",
             "edges": [
                 {
@@ -697,6 +663,36 @@
             "display_position": {
                 "x": 4020.310534677917,
                 "y": -1198.531427401801
+            }
+        },
+        {
+            "instruction": {
+                "type": "prompt",
+                "text": "\"Perfeito! Entrarei em contato assim que possível. Agradeço seu tempo, será um prazer recebê-lo(a) para a consulta. Até breve!\""
+            },
+            "name": "Conversation",
+            "edges": [
+                {
+                    "id": "edge-1766515594441-lp7e491vu",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "Describe the transition condition"
+                    }
+                }
+            ],
+            "id": "node-1766515594441",
+            "type": "conversation",
+            "display_position": {
+                "x": 4299.3523743351025,
+                "y": 183.59724270713144
+            },
+            "skip_response_edge": {
+                "destination_node_id": "node-1757330614671",
+                "id": "edge-1766515603410",
+                "transition_condition": {
+                    "type": "prompt",
+                    "prompt": "Skip response"
+                }
             }
         }
     ],

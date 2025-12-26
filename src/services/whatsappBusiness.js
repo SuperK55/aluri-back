@@ -83,7 +83,24 @@ class WhatsAppBusinessService {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(`WhatsApp API error: ${data.error?.message || 'Unknown error'}`);
+        const errorCode = data.error?.code;
+        const errorMessage = data.error?.message || 'Unknown error';
+        const errorDetails = data.error?.error_data?.details || '';
+        
+        log.error('WhatsApp API error details:', {
+          code: errorCode,
+          message: errorMessage,
+          details: errorDetails,
+          toNumber: normalizedPhone,
+          responseStatus: response.status
+        });
+        
+        // Error 131000 usually means the 24-hour window has closed or recipient issue
+        if (errorCode === 131000) {
+          throw new Error(`WhatsApp API error: Message failed - the 24-hour messaging window may have closed or recipient cannot receive messages. (${errorMessage})`);
+        }
+        
+        throw new Error(`WhatsApp API error: (${errorCode}) ${errorMessage}`);
       }
 
       log.info(`WhatsApp message sent successfully to ${normalizedPhone}`, {

@@ -3,7 +3,7 @@ import { supa } from './lib/supabase.js';
 import { agentManager } from './services/agentManager.js';
 import { log } from './config/logger.js';
 import { twilio } from './lib/twilio.js';
-import { getNowInSaoPaulo, isWithinBusinessHours, getIsoStringNow, getDateStringInTimezone, getDayOfWeekInTimezone, normalizeDateString } from './utils/timezone.js';
+import { getNowInSaoPaulo, isWithinBusinessHours, getIsoStringNow, getDateStringInTimezone, getDayOfWeekInTimezone, normalizeDateString, toIsoStringSaoPaulo } from './utils/timezone.js';
 import { whatsappBusinessService } from './services/whatsappBusiness.js';
 import { normalizePhoneNumber } from './lib/retell.js';
 
@@ -151,21 +151,40 @@ async function findEarlierAvailableSlots(resourceId, resourceType, ownerId, befo
       const startOfDay = new Date(dateString + `T00:00:00${offset}`);
       const endOfDay = new Date(dateString + `T23:59:59${offset}`);
       
-      let appointmentsQuery = supa
-        .from('appointments')
-        .select('start_at, end_at')
-        .gte('start_at', startOfDay.toISOString())
-        .lte('start_at', endOfDay.toISOString())
-        .eq('status', 'scheduled');
+      let appointments = [];
       
       if (resourceType === 'doctor') {
-        appointmentsQuery = appointmentsQuery.eq('resource_type', 'doctor').eq('resource_id', resourceId);
+        // Query for appointments with resource_type/resource_id
+        const { data: appointmentsData } = await supa
+          .from('appointments')
+          .select('start_at, end_at')
+          .eq('resource_type', 'doctor')
+          .eq('resource_id', resourceId)
+          .gte('start_at', startOfDay.toISOString())
+          .lte('start_at', endOfDay.toISOString())
+          .eq('status', 'scheduled');
+        
+        appointments = appointmentsData || [];
       } else if (resourceType === 'treatment') {
-        appointmentsQuery = appointmentsQuery.eq('resource_type', 'treatment').eq('resource_id', resourceId);
+        const { data: treatmentAppointments } = await supa
+          .from('appointments')
+          .select('start_at, end_at')
+          .eq('resource_type', 'treatment')
+          .eq('resource_id', resourceId)
+          .gte('start_at', startOfDay.toISOString())
+          .lte('start_at', endOfDay.toISOString())
+          .eq('status', 'scheduled');
+        
+        appointments = treatmentAppointments || [];
       }
       
-      const { data: appointments } = await appointmentsQuery;
       const busySlots = appointments || [];
+      
+      if (busySlots.length > 0) {
+        log.debug(`Found ${busySlots.length} existing appointments on ${dateString} for ${resourceType} ${resourceId}:`, 
+          busySlots.map(a => ({ start: a.start_at, end: a.end_at }))
+        );
+      }
       
       // Find available slots on this day
       for (const slot of effectiveSchedule.timeSlots) {
@@ -179,11 +198,18 @@ async function findEarlierAvailableSlots(resourceId, resourceType, ownerId, befo
         // Skip if slot is in the past
         if (slotStartTime <= today) continue;
         
-        // Check for conflicts
+        // Check for conflicts with existing appointments
         const hasConflict = busySlots.some(appointment => {
           const appointmentStart = new Date(appointment.start_at);
           const appointmentEnd = new Date(appointment.end_at);
-          return (slotStartTime < appointmentEnd && slotEndTime > appointmentStart);
+          // Check if slot overlaps with appointment (either slot starts during appointment or appointment overlaps slot)
+          const conflicts = (slotStartTime < appointmentEnd && slotEndTime > appointmentStart);
+          
+          if (conflicts) {
+            log.debug(`Slot ${slotStartTime.toISOString()} conflicts with appointment ${appointmentStart.toISOString()} - ${appointmentEnd.toISOString()}`);
+          }
+          
+          return conflicts;
         });
         
         if (!hasConflict) {
@@ -198,6 +224,10 @@ async function findEarlierAvailableSlots(resourceId, resourceType, ownerId, befo
             time: `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`,
             formatted: formattedSlot
           });
+          
+          log.debug(`Added available slot: ${formattedSlot} (${slotStartTime.toISOString()})`);
+        } else {
+          log.debug(`Skipped slot ${slotStartTime.toISOString()} on ${dateString} due to conflict`);
         }
       }
     }
@@ -206,6 +236,13 @@ async function findEarlierAvailableSlots(resourceId, resourceType, ownerId, befo
     currentDate.setDate(currentDate.getDate() + 1);
     daysSearched++;
   }
+  
+  log.info(`findEarlierAvailableSlots: Found ${availableSlots.length} available slots for ${resourceType} ${resourceId} before ${beforeDate}`, {
+    slots: availableSlots.map(s => s.formatted),
+    resourceId,
+    resourceType,
+    beforeDate
+  });
   
   return availableSlots;
 }
@@ -332,7 +369,7 @@ cron.schedule('*/10 * * * *', async () => {
           .from('leads')
           .update({ 
             status: 'retry_failed',
-            next_retry_at: retryTime.toISOString() // Retry in 30 minutes
+            next_retry_at: toIsoStringSaoPaulo(retryTime) // Retry in 30 minutes (São Paulo timezone)
           })
           .eq('id', lead.id);
       }
@@ -383,7 +420,7 @@ cron.schedule('5 * * * *', async () => {
         const resourceType = lead.assigned_resource_type || 'doctor';
         const chatAgent = await agentManager.getChatAgentForOwner(
           ownerId, 
-          resourceType === 'treatment' ? 'beauty' : 'medical'
+          resourceType === 'treatment' ? 'beauty_clinic' : 'clinic'
         );
         
         // Get owner info
@@ -563,7 +600,7 @@ cron.schedule('5 * * * *', async () => {
         }
         
         // Get chat agent for this owner
-        const chatAgent = await agentManager.getChatAgentForOwner(ownerId, resourceType === 'treatment' ? 'beauty' : 'medical');
+        const chatAgent = await agentManager.getChatAgentForOwner(ownerId, resourceType === 'treatment' ? 'beauty_clinic' : 'clinic');
         if (!chatAgent) {
           log.warn('No chat agent found for owner, skipping:', { ownerId, leadId: lead.id });
           continue;
@@ -666,7 +703,55 @@ cron.schedule('5 * * * *', async () => {
         // Format available slots for agent context
         const availableSlotsText = earlierSlots.map(s => s.formatted).join('\n');
         
-        const { data: newChat, error: chatError } = await supa
+        // Check for existing active chat for this phone number
+        const { data: existingChat } = await supa
+          .from('whatsapp_chats')
+          .select('id')
+          .eq('wa_phone', normalizedPhone)
+          .in('status', ['open', 'pending_response'])
+          .single();
+
+        let newChat;
+        if (existingChat) {
+          // Update existing active chat
+          const { data: updatedChat, error: updateError } = await supa
+            .from('whatsapp_chats')
+            .update({
+              lead_id: lead.id,
+              agent_id: chatAgent.id,
+              status: 'pending_response',
+              metadata: chatMetadata,
+              agent_variables: {
+                ...agentVariables,
+                name: firstName,
+                client_name: lead.name,
+                resource_name: resourceName,
+                resource_type: resourceType,
+                business_name: ownerData?.business_name || 'Clínica',
+                agent_name: chatAgent.agent_name || 'Assistente',
+                suggested_date: formattedSuggestedDate,
+                available_slots: availableSlotsText,
+                slot_1: earlierSlots[0]?.formatted || '',
+                slot_1_date: earlierSlots[0]?.date || '',
+                slot_1_time: earlierSlots[0]?.time || '',
+                slot_2: earlierSlots[1]?.formatted || '',
+                slot_2_date: earlierSlots[1]?.date || '',
+                slot_2_time: earlierSlots[1]?.time || ''
+              },
+              last_message_at: new Date().toISOString()
+            })
+            .eq('id', existingChat.id)
+            .select()
+            .single();
+
+          if (updateError) {
+            log.error('Error updating whatsapp_chats record:', updateError);
+          } else {
+            newChat = updatedChat;
+          }
+        } else {
+          // Insert new chat record
+          const { data: insertedChat, error: chatError } = await supa
           .from('whatsapp_chats')
           .insert({
             owner_id: ownerId,
@@ -700,6 +785,11 @@ cron.schedule('5 * * * *', async () => {
         if (chatError) {
           log.error('Error creating whatsapp_chats record:', chatError);
         } else {
+            newChat = insertedChat;
+          }
+        }
+        
+        if (newChat) {
           // Store the outbound template message
           await supa
             .from('whatsapp_messages')

@@ -1,5 +1,5 @@
 {
-    "global_prompt": "You are {{agent_name}}, an assistant at {{business_name}} clinic. You communicate via WhatsApp text messages in a WARM, FRIENDLY, and PROFESSIONAL manner.\n\n## CRITICAL: Template Already Sent\nIMPORTANT: A WhatsApp template message was ALREADY sent to the user before this conversation started. DO NOT repeat the template greeting. The user is REPLYING to that template.\n\n## Objective:\nHelp patients schedule consultations, answer questions, and provide excellent service through text conversation.\n\n## WhatsApp-Specific Style:\n- Be concise: Keep messages short and readable on mobile devices (2-3 sentences max)\n- Use emojis naturally but not excessively (😊, 👍, 📅, 🏥, 👉)\n- Break long messages into multiple shorter ones for better readability\n- Be conversational and warm\n- Respond quickly and directly to user questions\n- Always acknowledge what the user says before moving to next topic\n\n## Critical Rules:\n- NAME CONSISTENCY: ALWAYS use the exact same client name ({{name}}) throughout. Never mix up names or genders\n- One question at a time: Don't overwhelm with multiple questions in one message\n- Natural flow: Match the user's communication style and pace\n- Direct answers: Answer questions directly without unnecessary repetition\n- Context awareness: Remember what was already discussed in the conversation\n- Track conversation: Don't repeat questions or information already covered\n- NEVER re-send the initial template message - it was already sent!\n\n## Anti-Repetition & Natural Variety:\n- Rotate acknowledgments: Don't use the same phrase twice in a row (vary between 'Entendi!', 'Perfeito!', 'Ótimo!', 'Certo!', 'Legal!')\n- Avoid overused phrases: 'I understand', 'Perfect', 'Great question', 'No problem' - use sparingly\n- Paraphrase instead of repeating: If user asks similar questions, vary your responses\n- Keep it fresh: Each response should feel unique and human\n\n## Date/Time Formatting:\n- Use natural language: \"15 de novembro às 12:30\" not \"15/11/2025\"\n- Day of week helps: \"segunda-feira, 15 de novembro às 12:30\"\n- Be clear about morning/afternoon: \"manhã\" or \"tarde\"\n\n## Response Guidelines:\n- Keep messages under 2-3 sentences when possible\n- Use line breaks to separate different thoughts\n- Confirm understanding by restating key information\n- Always end with a clear next step or question\n\n## Business Context:\n- Clinic: {{business_name}}\n- Specialty: {{business_specialty}}\n- Social Proof: {{social_proof}}\n- Doctor: {{doctor_name}} ({{doctor_specialty}})\n- Location: {{doctor_city}}\n- Telemedicine: {{telemedicine}}\n- Consultation price: {{consultation_price}}\n- Duration: {{consultation_duration}}\n- Available slots: {{available_slots}}",
+    "global_prompt": "You are {{agent_name}}, an assistant at {{business_name}} clinic. You communicate via WhatsApp text messages in a WARM, FRIENDLY, and PROFESSIONAL manner.\n\n## CRITICAL: Template Already Sent\nIMPORTANT: A WhatsApp template message was ALREADY sent to the user before this conversation started. DO NOT repeat the template greeting. The user is REPLYING to that template.\n\n## Objective:\nHelp patients schedule consultations, answer questions, and provide excellent service through text conversation.\n\n## WhatsApp-Specific Style:\n- Be concise: Keep messages short and readable on mobile devices (2-3 sentences max)\n- Use emojis naturally but not excessively (😊, 👍, 📅, 🏥, 👉)\n- Break long messages into multiple shorter ones for better readability\n- Be conversational and warm\n- Respond quickly and directly to user questions\n- Always acknowledge what the user says before moving to next topic\n\n## Critical Rules:\n- NAME CONSISTENCY: ALWAYS use the exact same client name ({{name}}) throughout. Never mix up names or genders\n- One question at a time: Don't overwhelm with multiple questions in one message\n- Natural flow: Match the user's communication style and pace\n- Direct answers: Answer questions directly without unnecessary repetition\n- Context awareness: Remember what was already discussed in the conversation\n- Track conversation: Don't repeat questions or information already covered\n- NEVER re-send the initial template message - it was already sent!\n- The doctor does not see patients on weekends.\n\n## Anti-Repetition & Natural Variety:\n- Rotate acknowledgments: Don't use the same phrase twice in a row (vary between 'Entendi!', 'Perfeito!', 'Ótimo!', 'Certo!', 'Legal!')\n- Avoid overused phrases: 'I understand', 'Perfect', 'Great question', 'No problem' - use sparingly\n- Paraphrase instead of repeating: If user asks similar questions, vary your responses\n- Keep it fresh: Each response should feel unique and human\n\n## Date/Time Formatting:\n- Use natural language: \"15 de novembro às 12:30\" not \"15/11/2025\"\n- Day of week helps: \"segunda-feira, 15 de novembro às 12:30\"\n- Be clear about morning/afternoon: \"manhã\" or \"tarde\"\n\n## Response Guidelines:\n- Keep messages under 2-3 sentences when possible\n- Use line breaks to separate different thoughts\n- Confirm understanding by restating key information\n- Always end with a clear next step or question\n\n## Business Context:\n- Clinic: {{business_name}}\n- Specialty: {{business_specialty}}\n- Social Proof: {{social_proof}}\n- Doctor: {{doctor_name}} ({{doctor_specialty}})\n- Location: {{doctor_city}}\n- Telemedicine: {{telemedicine}}\n- Consultation price: {{consultation_price}}\n- Duration: {{consultation_duration}}\n- Available slots: {{available_slots}}",
     "nodes": [
         {
             "name": "Route_By_Chat_Type",
@@ -178,11 +178,11 @@
                     }
                 },
                 {
-                    "destination_node_id": "node-reschedule-flow",
+                    "destination_node_id": "node-1766497589101",
                     "id": "edge-confirm-to-reschedule",
                     "transition_condition": {
                         "type": "prompt",
-                        "prompt": "User wants to reschedule to different time"
+                        "prompt": "User wants to reschedule"
                     }
                 },
                 {
@@ -205,19 +205,15 @@
             "id": "node-confirm-appointment",
             "type": "conversation",
             "display_position": {
-                "x": 615.6699101393302,
-                "y": 329.8253487101765
+                "x": 601.6699101393302,
+                "y": 301.8253487101765
             },
             "instruction": {
                 "type": "prompt",
-                "text": "CHAT TYPE: 'confirm_appointment' - User is REPLYING to our appointment_confirmation_doc template.\n\nThe template they received was:\n\"Olá {{name}}! 🎉\nSua consulta com o(a) Dr(a). {{doctor_name}} foi agendada!\n📅 Data: {{appointment_date}}\n⏰ Horário: {{appointment_time}}\n📍 Local: {{doctor_address}}\n💰 Valor: {{consultation_price}}\n\nPrecisa de alguma informação adicional? 😊\"\n\n## Your Task:\nACKNOWLEDGE their response. The appointment is ALREADY confirmed.\n\n## Based on user's response:\n\n**If user confirms/thanks (ok, obrigado, perfeito, entendido):**\n\"Ótimo, {{name}}! 😊\nQualquer dúvida, é só chamar aqui.\nAté o dia da consulta! 👋\"\n\n**If user asks about something (endereço, valor, como funciona):**\nAnswer their question directly.\n\n**If user wants to reschedule:**\nRoute to Reschedule_Flow node. The Reschedule_Flow will ask \"Para qual dia você gostaria de remarcar?\" first - DO NOT offer alternatives immediately.\n\n**If user wants to cancel:**\n\"Entendi, {{name}}. Posso cancelar o agendamento.\nPosso ajudar em outra coisa? 😊\"\n\nWait for response."
+                "text": "CHAT TYPE: 'confirm_appointment' - User is REPLYING to our appointment_confirmation_doc template.\n\nThe template they received was:\n\"Olá {{name}}! 🎉\nSua consulta com o(a) Dr(a). {{doctor_name}} foi agendada!\n📅 Data: {{appointment_date}}\n⏰ Horário: {{appointment_time}}\n📍 Local: {{doctor_address}}\n💰 Valor: {{consultation_price}}\n\nPrecisa de alguma informação adicional? 😊\"\n\n## Your Task:\nACKNOWLEDGE their response. The appointment is ALREADY confirmed.\n\n## Based on user's response:\n\n**If user confirms/thanks (ok, obrigado, perfeito, entendido):**\n\"Ótimo, {{name}}! 😊\nQualquer dúvida, é só chamar aqui.\nAté o dia da consulta! 👋\"\n\n**If user asks about something (endereço, valor, como funciona):**\nAnswer their question directly.\n\n**If user wants to reschedule:**\n\"Sem problemas, {{name}}! 😊\nVamos encontrar um novo horário para você.\nPara qual dia você gostaria de remarcar?\"\nAnd confirm the date what the client want\n\n**If user wants to cancel:**\n\"Entendi, {{name}}. Posso cancelar o agendamento.\nPosso ajudar em outra coisa? 😊\"\n\nWait for response."
             }
         },
         {
-            "instruction": {
-                "type": "prompt",
-                "text": "CHAT TYPE: 'followup' - User is returning after a previous conversation ended.\n\nThis is a RETURNING user who previously chatted with us. Be welcoming but don't repeat old information.\n\n## Your Task:\nGreet them warmly and ask how you can help:\n\n\"Olá novamente, {{name}}! 😊\nComo posso te ajudar?\"\n\nWait for their response and then help accordingly:\n\n**If user asks about their existing appointment:**\nCheck and provide appointment details, offer to reschedule if needed.\n\n**If user has a new question:**\nAnswer directly and helpfully.\n\n**If user wants to schedule a new appointment:**\nShow available slots: \"Temos os seguintes horários disponíveis:\\n{{available_slots}}\\n\\nQual funciona para você? 📅\"\n\n**If user wants to reschedule:**\nGo to reschedule flow.\n\n**If user wants to cancel:**\nGo to cancel flow.\n\nWait for response."
-            },
             "name": "Followup_Flow",
             "edges": [
                 {
@@ -264,8 +260,12 @@
             "id": "node-followup-flow",
             "type": "conversation",
             "display_position": {
-                "x": 600,
-                "y": 500
+                "x": 624,
+                "y": 967.9999999999994
+            },
+            "instruction": {
+                "type": "prompt",
+                "text": "CHAT TYPE: 'followup' - User is returning after a previous conversation ended.\n\nThis is a RETURNING user who previously chatted with us. Be welcoming but don't repeat old information.\n\n## Your Task:\nGreet them warmly and ask how you can help:\n\n\"Olá novamente, {{name}}! 😊\nComo posso te ajudar?\"\n\nWait for their response and then help accordingly:\n\n**If user asks about their existing appointment:**\nCheck and provide appointment details, offer to reschedule if needed.\n\n**If user has a new question:**\nAnswer directly and helpfully.\n\n**If user wants to schedule a new appointment:**\nShow available slots: \"Temos os seguintes horários disponíveis:\\n{{available_slots}}\\n\\nQual funciona para você? 📅\"\n\n**If user wants to reschedule:**\nGo to reschedule flow.\n\n**If user wants to cancel:**\nGo to cancel flow.\n\nWait for response."
             }
         },
         {
@@ -283,8 +283,8 @@
             "id": "node-other-greeting",
             "type": "conversation",
             "display_position": {
-                "x": 620.8932135191069,
-                "y": 989.4760461305293
+                "x": 624.8932135191069,
+                "y": 1811.4760461305282
             },
             "instruction": {
                 "type": "prompt",
@@ -385,7 +385,7 @@
             },
             "instruction": {
                 "type": "prompt",
-                "text": "Present the recommended doctor to the user:\n\n\"Encontrei o(a) Dr(a). {{doctor_name}} para você! 😊\n\n👨‍⚕️ Especialidade: {{doctor_specialty}}\n📍 Local: {{doctor_city}}\n💰 Consulta: {{consultation_price}}\n⏱️ Duração: {{consultation_duration}}\n\n{{doctor_bio}}\n\nGostaria de ver os horários disponíveis?\"\n\nWait for response."
+                "text": "Present the recommended doctor to the user:\n\n\"Encontrei o(a) Dr(a). {{doctor_name}} para você! 😊\n\n👨‍⚕️ Especialidade: {{doctor_specialty}}\n💰 Consulta: {{consultation_price}}\n⏱️ Duração: {{consultation_duration}}\n\n{{doctor_bio}}\n\nGostaria de ver os horários disponíveis?\"\n\nWait for response."
             }
         },
         {
@@ -432,7 +432,7 @@
             },
             "instruction": {
                 "type": "prompt",
-                "text": "User wants to see available dates/times.\n\n\"Temos os seguintes horários disponíveis:\n\n{{available_slots}}\n\nQual funciona melhor para você? 😊\"\n\nIf user asks for a SPECIFIC date not in the list, transition to extract date and check availability.\n\nWait for response."
+                "text": "User wants to see available dates/times.\n\n\"Temos os seguintes horários disponíveis:\n\n{{available_slots}}\n\nQual funciona melhor para você? 😊\"\n\nIf user asks for a SPECIFIC date not in the list, transition to extract date and check availability.\n\nIMPORTANT: The doctor does not see patients on weekends.\n\nWait for response."
             }
         },
         {
@@ -497,7 +497,7 @@
             "variables": [
                 {
                     "name": "date",
-                    "description": "The specific date the user is asking about in ISO format (YYYY-MM-DD). If user mentions only day and month without year, use current year {{current_year}}. If user asks for 'another date' without specifying, use the next day after {{suggested_date}}.",
+                    "description": "The specific date the user is asking about in ISO format (YYYY-MM-DD). If user mentions only day and month without year, use current year {{suggested_date}}. If user asks for 'another date' without specifying, use the next day after {{suggested_date}}.",
                     "type": "string",
                     "choices": []
                 }
@@ -588,7 +588,7 @@
             },
             "instruction": {
                 "type": "prompt",
-                "text": "Present the availability results from the check-availability function.\n\nIf {{available}} is true and we have {{availableSlots}}:\n\"Temos horários disponíveis para essa data! 😊\n\n👉 [Format each slot from availableSlots]\n\nQual funciona para você?\"\n\nIf {{available}} is false (no slots for the requested date):\n\"Infelizmente não temos horários disponíveis para essa data específica. 😕\n\nPara qual outra data você gostaria que eu verificasse?\"\n\nIMPORTANT: Do NOT show {{available_slots}} when {{available}} is false - those are pre-loaded slots that may be for different dates. Only show slots from {{availableSlots}} when {{available}} is true.\n\nWait for response."
+                "text": "Present the availability results from the check-availability function.\n\n- If {{available}} is true and we have {{availableSlots}}:\n\"Temos horários disponíveis para essa data! 😊\n\n👉 [Format each slot from availableSlots]\n\nQual funciona para você?\"\n\n- If {{available}} is false and reason({{reason}}) is not \"weekend\":\n\"Hum, infelizmente a agenda já está completa para esse dia específico. Mas temos disponibilidade em: {{available_slots}}. \nQual funcionaria para você ?\"\n\n- if {{available}} is false and reason({{reason}}) is \"weekend\"\n\"El médico no atiende pacientes los fines de semana. ¿Puedo preguntar por otras fechas disponibles? ¿O tiene alguna otra fecha preferida en mente?\"\n\nIMPORTANT: The doctor does not see patients on weekends.\n\nWait for response."
             }
         },
         {
@@ -606,8 +606,8 @@
             "id": "node-offer-callback",
             "type": "conversation",
             "display_position": {
-                "x": 2600,
-                "y": 200
+                "x": 2606.153846153846,
+                "y": 676.9230769230769
             },
             "instruction": {
                 "type": "prompt",
@@ -645,12 +645,12 @@
             "id": "node-final-confirmation",
             "type": "conversation",
             "display_position": {
-                "x": 2600,
-                "y": 0
+                "x": 2607.903878522858,
+                "y": 45.7592181153618
             },
             "instruction": {
                 "type": "prompt",
-                "text": "Final confirmation of the selected time slot.\n\n\"Perfeito, {{name}}! 🎉\n\nVou agendar sua consulta:\n\n👨‍⚕️ Dr(a). {{doctor_name}}\n📅 [Selected date and time]\n📍 {{doctor_address}}\n💰 {{consultation_price}}\n\nConfirmo o agendamento?\"\n\nWait for user to confirm.\n\n**If user confirms:**\nProceed to extract the selected date and time, then book the appointment.\n\n**If user asks to change:**\nGo back to offer alternatives."
+                "text": "Final confirmation of the selected time slot.\n\n\"Perfeito, {{name}}! 🎉\n\nVou agendar sua consulta:\n\n👨‍⚕️ Dr(a). {{doctor_name}}\n📅 [Selected date and time]\n💰 {{consultation_price}}\n\nConfirmo o agendamento?\"\n\nWait for user to confirm.\n\n**If user confirms:**\nProceed to extract the selected date and time, then book the appointment.\n\n**If user asks to change:**\nGo back to offer alternatives."
             }
         },
         {
@@ -730,6 +730,14 @@
                     "transition_condition": {
                         "type": "prompt",
                         "prompt": "User confirms or has no more questions"
+                    }
+                },
+                {
+                    "destination_node_id": "node-reschedule-flow",
+                    "id": "edge-1766175923788-094u1why6",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants to reschedule their appointment"
                     }
                 }
             ],
@@ -845,19 +853,11 @@
             "name": "Reschedule_Flow",
             "edges": [
                 {
-                    "destination_node_id": "node-extract-reschedule-details",
+                    "destination_node_id": "node-1766497589101",
                     "id": "edge-reschedule-to-extract",
                     "transition_condition": {
                         "type": "prompt",
                         "prompt": "User selects a new date and time"
-                    }
-                },
-                {
-                    "destination_node_id": "node-extract-requested-date",
-                    "id": "edge-reschedule-to-check-date",
-                    "transition_condition": {
-                        "type": "prompt",
-                        "prompt": "User asks for a specific date not in the available list"
                     }
                 },
                 {
@@ -880,12 +880,12 @@
             "id": "node-reschedule-flow",
             "type": "conversation",
             "display_position": {
-                "x": 1594.7766966202234,
-                "y": 624.8286748885073
+                "x": 1602.469004312531,
+                "y": 714.0594441192761
             },
             "instruction": {
                 "type": "prompt",
-                "text": "User wants to reschedule their existing appointment.\n\n\"Sem problemas, {{name}}! 😊\nVamos encontrar um novo horário para você.\n\nPara qual dia você gostaria de remarcar?\"\n\nWait for user to tell their preferred date. DO NOT show available slots yet - first ask which date they prefer, then check availability for that date."
+                "text": "User wants to reschedule their existing appointment.\n\n\"Sem problemas, {{name}}! 😊\nVamos encontrar um novo horário para você.\nPara qual dia você gostaria de remarcar?\"\n\nWait user's response\n\n"
             }
         },
         {
@@ -943,8 +943,8 @@
             "tool_type": "local",
             "speak_during_execution": false,
             "display_position": {
-                "x": 2610.603369430742,
-                "y": 680.9892899146594
+                "x": 2602.6222803751334,
+                "y": 1204.1708112491697
             },
             "wait_for_result": true
         },
@@ -965,6 +965,14 @@
                     "transition_condition": {
                         "type": "prompt",
                         "prompt": "User confirms or has no more questions"
+                    }
+                },
+                {
+                    "destination_node_id": "node-reschedule-flow",
+                    "id": "edge-1766175871106-1y9wrp51w",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User wants to reschedule their appointment"
                     }
                 }
             ],
@@ -994,10 +1002,13 @@
             }
         },
         {
+            "instruction": {
+                "type": "prompt",
+                "text": "  Perfeito! Obrigado(a) pelo seu tempo, {{name}}. Em nome do(a) Dr(a). {{doctor_name}}, será um prazer recebê-lo(a) para a consulta. Até breve!"
+            },
             "name": "Conversation",
             "edges": [
                 {
-                    "destination_node_id": "node-goodbye",
                     "id": "edge-1766080698247-jtvqnhqhu",
                     "transition_condition": {
                         "type": "prompt",
@@ -1011,9 +1022,118 @@
                 "x": 4899.486239867124,
                 "y": 1287.12481664911
             },
+            "skip_response_edge": {
+                "destination_node_id": "node-goodbye",
+                "id": "edge-1766176304563",
+                "transition_condition": {
+                    "type": "prompt",
+                    "prompt": "Skip response"
+                }
+            }
+        },
+        {
+            "tool_id": "tool-1761643337360",
+            "instruction": {
+                "type": "static_text",
+                "text": ""
+            },
+            "name": "Check_Availability",
+            "edges": [
+                {
+                    "destination_node_id": "node-1766179582439",
+                    "id": "edge-1766178845887-0-8xz3r4e5o",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After checking availability"
+                    }
+                }
+            ],
+            "id": "node-1766178845887",
+            "type": "function",
+            "tool_type": "local",
+            "speak_during_execution": false,
+            "display_position": {
+                "x": 1629.321349398363,
+                "y": 1554.089733073909
+            },
+            "wait_for_result": true
+        },
+        {
+            "name": "Present_Availability_Results",
+            "edges": [
+                {
+                    "destination_node_id": "node-extract-reschedule-details",
+                    "id": "edge-1766179582439-0-34gfvsjq4",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User selects a time slot"
+                    }
+                },
+                {
+                    "destination_node_id": "node-1766497589101",
+                    "id": "edge-1766179582439-2-152wh88t9",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User asks about another date"
+                    }
+                },
+                {
+                    "destination_node_id": "node-cancel-appointment",
+                    "id": "edge-1766179713712-ccxi5pqdh",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User decides to cancel instead"
+                    }
+                },
+                {
+                    "destination_node_id": "node-goodbye",
+                    "id": "edge-1766179732047-jgcl43dxc",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "User changes mind and wants to keep original appointment"
+                    }
+                }
+            ],
+            "id": "node-1766179582439",
+            "type": "conversation",
+            "display_position": {
+                "x": 1631.3562043562765,
+                "y": 1849.3177971248097
+            },
             "instruction": {
                 "type": "prompt",
-                "text": "  Perfeito! Obrigado(a) pelo seu tempo, {{name}}. Em nome do(a) Dr(a). {{doctor_name}}, será um prazer recebê-lo(a) para a consulta. Até breve!"
+                "text": "Present the availability results from the check-availability function.\n\n- If {{available}} is true and we have {{availableSlots}}:\n\"Temos horários disponíveis para essa data! 😊\n\n👉 [Format each slot from availableSlots]\n\nQual funciona para você?\"\n\n- If {{available}} is false and reason({{reason}}) is not \"weekend\":\n\"Hum, infelizmente a agenda já está completa para esse dia específico. Mas temos disponibilidade em: {{availableSlots}}. \nQual funcionaria para você ?\"\n\n- if {{available}} is false and reason({{reason}}) is \"weekend\"\n\"El médico no atiende pacientes los fines de semana. ¿Puedo preguntar por otras fechas disponibles? ¿O tiene alguna otra fecha preferida en mente?\"\n\nIMPORTANT: \n- The doctor does not see patients on weekends.\n- If the user wants a different date (without choosing correct date), ask for the user's preferred date to confirm the correct date. (Date)\n\nWait for response."
+            }
+        },
+        {
+            "variables": [
+                {
+                    "name": "date",
+                    "description": "The specific date the user is asking about in ISO format (YYYY-MM-DD). If user mentions only day and month without year, use year {{suggested_year}}. If user asks for 'another date' without specifying, use the next day after {{suggested_date}}.",
+                    "type": "string",
+                    "choices": []
+                }
+            ],
+            "model_choice": {
+                "type": "cascading",
+                "model": "gpt-4.1"
+            },
+            "name": "Extract_Requested_Date",
+            "edges": [
+                {
+                    "destination_node_id": "node-1766178845887",
+                    "id": "edge-1766497589101-0-lpi3h4pav",
+                    "transition_condition": {
+                        "type": "prompt",
+                        "prompt": "After extracting date"
+                    }
+                }
+            ],
+            "id": "node-1766497589101",
+            "type": "extract_dynamic_variables",
+            "display_position": {
+                "x": 1618.397726899266,
+                "y": 1258.9305895897173
             }
         }
     ],
@@ -1295,7 +1415,7 @@
     ],
     "model_choice": {
         "type": "cascading",
-        "model": "gpt-4.1",
+        "model": "gpt-5.2",
         "high_priority": false
     },
     "model_temperature": 0.3,
@@ -1306,10 +1426,9 @@
         "filter_score": 0.6
     },
     "begin_tag_display_position": {
-        "x": 0,
-        "y": 0
+        "x": -160.8991432141807,
+        "y": -1.1659358203926136
     },
     "is_published": false,
-    "mcps": [],
-    "flex_mode": true
+    "mcps": []
 }

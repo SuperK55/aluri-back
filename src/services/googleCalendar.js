@@ -80,33 +80,108 @@ class GoogleCalendarService {
         .eq('id', doctorId)
         .single();
 
+      if (!doctor) {
+        throw new Error(`Doctor ${doctorId} not found`);
+      }
+
+      if (!doctor.google_calendar_id) {
+        throw new Error(`Doctor ${doctorId} (${doctor.name}) does not have a Google Calendar ID configured`);
+      }
+
+      // Verify the calendar exists and is accessible, and get its timezone
+      let calendarTimezone = 'America/Sao_Paulo';
+      try {
+        const calendarInfo = await calendar.calendars.get({
+          calendarId: doctor.google_calendar_id
+        });
+        calendarTimezone = calendarInfo.data.timeZone || 'America/Sao_Paulo';
+        log.info(`Verified calendar access for doctor ${doctorId}:`, {
+          calendarId: doctor.google_calendar_id,
+          calendarSummary: calendarInfo.data.summary,
+          calendarTimeZone: calendarTimezone
+        });
+      } catch (calendarCheckError) {
+        log.error(`Cannot access calendar ${doctor.google_calendar_id} for doctor ${doctorId}:`, calendarCheckError.message);
+        throw new Error(`Calendar ${doctor.google_calendar_id} is not accessible: ${calendarCheckError.message}`);
+      }
+
       // Handle both old format (startTime/endTime) and new format (start.dateTime/end.dateTime)
-      let startDateTime, endDateTime, timezone;
+      let startDateTime, endDateTime, appointmentTimezone;
       
       if (appointmentData.start && appointmentData.start.dateTime) {
         // New format from consultation endpoint
         startDateTime = appointmentData.start.dateTime;
         endDateTime = appointmentData.end.dateTime;
-        timezone = appointmentData.start.timeZone || appointmentData.end.timeZone || 'America/Sao_Paulo';
+        appointmentTimezone = appointmentData.start.timeZone || appointmentData.end.timeZone || 'America/Sao_Paulo';
       } else {
         // Old format from appointments endpoint
         startDateTime = appointmentData.startTime;
         endDateTime = appointmentData.endTime;
-        timezone = appointmentData.timezone || 'America/Sao_Paulo';
+        appointmentTimezone = appointmentData.timezone || 'America/Sao_Paulo';
       }
 
-      log.info('Creating Google Calendar event with:', { startDateTime, endDateTime, timezone });
+      // Convert appointment times to calendar's timezone
+      // Parse the appointment datetime and convert to calendar timezone
+      const startDate = new Date(startDateTime);
+      const endDate = new Date(endDateTime);
+      
+      // Format dates in the calendar's timezone
+      const formatDateTimeForTimezone = (date, timezone) => {
+        // Use Intl.DateTimeFormat to format in the target timezone
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+          timeZone: timezone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        });
+        
+        const parts = formatter.formatToParts(date);
+        const year = parts.find(p => p.type === 'year').value;
+        const month = parts.find(p => p.type === 'month').value;
+        const day = parts.find(p => p.type === 'day').value;
+        const hour = parts.find(p => p.type === 'hour').value;
+        const minute = parts.find(p => p.type === 'minute').value;
+        const second = parts.find(p => p.type === 'second').value;
+        
+        // Calculate timezone offset for the calendar timezone
+        // Create a date formatter to get the offset
+        const utcDate = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }));
+        const tzDate = new Date(date.toLocaleString('en-US', { timeZone: timezone }));
+        const offsetMs = tzDate.getTime() - utcDate.getTime();
+        const offsetHours = Math.floor(Math.abs(offsetMs) / (1000 * 60 * 60));
+        const offsetMinutes = Math.floor((Math.abs(offsetMs) % (1000 * 60 * 60)) / (1000 * 60));
+        const offsetSign = offsetMs >= 0 ? '+' : '-';
+        const offset = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
+        
+        return `${year}-${month}-${day}T${hour}:${minute}:${second}${offset}`;
+      };
+      
+      const startDateTimeInCalendarTZ = formatDateTimeForTimezone(startDate, calendarTimezone);
+      const endDateTimeInCalendarTZ = formatDateTimeForTimezone(endDate, calendarTimezone);
+
+      log.info('Creating Google Calendar event with:', { 
+        originalStart: startDateTime,
+        originalEnd: endDateTime,
+        originalTimezone: appointmentTimezone,
+        calendarTimezone: calendarTimezone,
+        convertedStart: startDateTimeInCalendarTZ,
+        convertedEnd: endDateTimeInCalendarTZ
+      });
 
       const event = {
         summary: appointmentData.summary || appointmentData.title || `Consulta com ${appointmentData.patientName || 'Paciente'}`,
         description: appointmentData.description || `Consulta médica com ${appointmentData.patientName || 'Paciente'}`,
         start: {
-          dateTime: startDateTime,
-          timeZone: timezone
+          dateTime: startDateTimeInCalendarTZ,
+          timeZone: calendarTimezone
         },
         end: {
-          dateTime: endDateTime,
-          timeZone: timezone
+          dateTime: endDateTimeInCalendarTZ,
+          timeZone: calendarTimezone
         },
         attendees: appointmentData.attendees || [],
         location: appointmentData.location || appointmentData.office_address,
@@ -121,13 +196,41 @@ class GoogleCalendarService {
         colorId: '9' // Blue color for medical appointments
       };
 
+      log.info(`Creating Google Calendar event for doctor ${doctorId} in calendar ${doctor.google_calendar_id}`, {
+        summary: event.summary,
+        start: event.start.dateTime,
+        end: event.end.dateTime,
+        timezone: event.start.timeZone
+      });
+
       const response = await calendar.events.insert({
         calendarId: doctor.google_calendar_id,
         resource: event,
         sendUpdates: 'all' // Send email notifications to attendees
       });
 
-      log.info(`Created Google Calendar event ${response.data.id} for doctor ${doctorId}`);
+      log.info(`Created Google Calendar event ${response.data.id} for doctor ${doctorId}`, {
+        eventId: response.data.id,
+        htmlLink: response.data.htmlLink,
+        calendarId: doctor.google_calendar_id,
+        summary: response.data.summary,
+        start: response.data.start?.dateTime,
+        end: response.data.end?.dateTime
+      });
+
+      // Verify the event was actually created by trying to retrieve it
+      try {
+        const verifyResponse = await calendar.events.get({
+          calendarId: doctor.google_calendar_id,
+          eventId: response.data.id
+        });
+        log.info(`Verified Google Calendar event exists: ${verifyResponse.data.id}`, {
+          status: verifyResponse.data.status,
+          htmlLink: verifyResponse.data.htmlLink
+        });
+      } catch (verifyError) {
+        log.error(`Failed to verify Google Calendar event ${response.data.id}:`, verifyError.message);
+      }
 
       // Update last sync timestamp
       await supa
@@ -287,30 +390,162 @@ class GoogleCalendarService {
         .eq('id', doctorId)
         .single();
 
+      if (!doctor || !doctor.google_calendar_id) {
+        throw new Error(`Doctor ${doctorId} not found or calendar not connected`);
+      }
+
+      // Get calendar timezone
+      let calendarTimezone = 'America/Sao_Paulo';
+      try {
+        const calendarInfo = await calendar.calendars.get({
+          calendarId: doctor.google_calendar_id
+        });
+        calendarTimezone = calendarInfo.data.timeZone || 'America/Sao_Paulo';
+        log.info(`Updating calendar event - calendar timezone: ${calendarTimezone}`);
+      } catch (calendarCheckError) {
+        log.warn(`Could not get calendar timezone, using default: ${calendarCheckError.message}`);
+      }
+
+      const appointmentTimezone = updates.timezone || 'America/Sao_Paulo';
+
+      // Format dates in the calendar's timezone (same logic as createAppointment)
+      const formatDateTimeForTimezone = (date, timezone) => {
+        // Use Intl.DateTimeFormat to format in the target timezone
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+          timeZone: timezone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        });
+        
+        const parts = formatter.formatToParts(date);
+        const year = parts.find(p => p.type === 'year').value;
+        const month = parts.find(p => p.type === 'month').value;
+        const day = parts.find(p => p.type === 'day').value;
+        const hour = parts.find(p => p.type === 'hour').value;
+        const minute = parts.find(p => p.type === 'minute').value;
+        const second = parts.find(p => p.type === 'second').value;
+        
+        // Calculate timezone offset for the specific date and timezone
+        // Create a date string in UTC and in the target timezone, then compare
+        const dateInUTC = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }));
+        const dateInTZ = new Date(date.toLocaleString('en-US', { timeZone: timezone }));
+        const offsetMs = dateInTZ.getTime() - dateInUTC.getTime();
+        const offsetHours = Math.floor(Math.abs(offsetMs) / (1000 * 60 * 60));
+        const offsetMinutes = Math.floor((Math.abs(offsetMs) % (1000 * 60 * 60)) / (1000 * 60));
+        const offsetSign = offsetMs >= 0 ? '+' : '-';
+        const offset = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
+        
+        return `${year}-${month}-${day}T${hour}:${minute}:${second}${offset}`;
+      };
+
       const event = {};
       if (updates.title) event.summary = updates.title;
       if (updates.description) event.description = updates.description;
+      
       if (updates.startTime) {
+        // Convert to calendar's timezone
+        const startDate = new Date(updates.startTime);
+        const startDateTimeInCalendarTZ = formatDateTimeForTimezone(startDate, calendarTimezone);
         event.start = {
-          dateTime: updates.startTime,
-          timeZone: updates.timezone || 'America/Sao_Paulo'
+          dateTime: startDateTimeInCalendarTZ,
+          timeZone: calendarTimezone
         };
+        log.debug(`Formatted start time for update: ${startDateTimeInCalendarTZ} in timezone ${calendarTimezone} (original: ${updates.startTime})`);
       }
+      
       if (updates.endTime) {
+        const endDate = new Date(updates.endTime);
+        const endDateTimeInCalendarTZ = formatDateTimeForTimezone(endDate, calendarTimezone);
         event.end = {
-          dateTime: updates.endTime,
-          timeZone: updates.timezone || 'America/Sao_Paulo'
+          dateTime: endDateTimeInCalendarTZ,
+          timeZone: calendarTimezone
         };
+        log.debug(`Formatted end time for update: ${endDateTimeInCalendarTZ} in timezone ${calendarTimezone} (original: ${updates.endTime})`);
       }
 
-      const response = await calendar.events.patch({
+      // Get the existing event first (recommended by Google for partial updates)
+      let existingEvent;
+      try {
+        const getResponse = await calendar.events.get({
+          calendarId: doctor.google_calendar_id,
+          eventId: eventId
+        });
+        existingEvent = getResponse.data;
+        log.debug(`Retrieved existing event for update:`, {
+          existingStart: existingEvent.start?.dateTime,
+          existingEnd: existingEvent.end?.dateTime
+        });
+      } catch (getError) {
+        log.warn(`Could not retrieve existing event ${eventId}, using patch method:`, getError.message);
+        // Fallback to patch if we can't get the event
+        const response = await calendar.events.patch({
+          calendarId: doctor.google_calendar_id,
+          eventId: eventId,
+          resource: event,
+          sendUpdates: 'all'
+        });
+        return response.data;
+      }
+
+      // Merge updates with existing event (preserve all other fields)
+      const updatedEvent = {
+        ...existingEvent,
+        ...event,
+        // Ensure start and end are properly set
+        start: event.start || existingEvent.start,
+        end: event.end || existingEvent.end
+      };
+
+      log.info(`Updating Google Calendar event ${eventId} for doctor ${doctorId}:`, {
+        eventId,
+        calendarId: doctor.google_calendar_id,
+        calendarTimezone,
+        updates: event,
+        mergedEvent: {
+          start: updatedEvent.start,
+          end: updatedEvent.end,
+          summary: updatedEvent.summary
+        }
+      });
+
+      // Use update method with full event resource (recommended by Google)
+      const response = await calendar.events.update({
         calendarId: doctor.google_calendar_id,
         eventId: eventId,
-        resource: event,
+        resource: updatedEvent,
         sendUpdates: 'all'
       });
 
-      log.info(`Updated Google Calendar event ${eventId} for doctor ${doctorId}`);
+      // Verify the event was actually updated by fetching it back
+      try {
+        const verifyResponse = await calendar.events.get({
+          calendarId: doctor.google_calendar_id,
+          eventId: eventId
+        });
+        
+        log.info(`Updated Google Calendar event ${eventId} for doctor ${doctorId}`, {
+          eventId: response.data.id,
+          htmlLink: response.data.htmlLink,
+          start: response.data.start?.dateTime,
+          end: response.data.end?.dateTime,
+          verifiedStart: verifyResponse.data.start?.dateTime,
+          verifiedEnd: verifyResponse.data.end?.dateTime,
+          verifiedSummary: verifyResponse.data.summary
+        });
+      } catch (verifyError) {
+        log.warn(`Could not verify updated event ${eventId}:`, verifyError.message);
+        log.info(`Updated Google Calendar event ${eventId} for doctor ${doctorId}`, {
+          eventId: response.data.id,
+          htmlLink: response.data.htmlLink,
+          start: response.data.start?.dateTime,
+          end: response.data.end?.dateTime
+        });
+      }
 
       await supa
         .from('doctors')
@@ -321,6 +556,197 @@ class GoogleCalendarService {
 
     } catch (error) {
       log.error('Error updating appointment in Google Calendar:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update a treatment appointment in Google Calendar (for beauty clinic)
+   */
+  async updateTreatmentAppointment(ownerId, eventId, updates) {
+    try {
+      const calendar = await this.getCalendarClientForOwner(ownerId);
+
+      const { data: owner } = await supa
+        .from('users')
+        .select('google_calendar_id, name')
+        .eq('id', ownerId)
+        .single();
+
+      if (!owner || !owner.google_calendar_id) {
+        throw new Error(`Owner ${ownerId} not found or calendar not connected`);
+      }
+
+      // Get calendar timezone
+      let calendarTimezone = 'America/Sao_Paulo';
+      try {
+        const calendarInfo = await calendar.calendars.get({
+          calendarId: owner.google_calendar_id
+        });
+        calendarTimezone = calendarInfo.data.timeZone || 'America/Sao_Paulo';
+        log.info(`Updating treatment calendar event - calendar timezone: ${calendarTimezone}`);
+      } catch (calendarCheckError) {
+        log.warn(`Could not get calendar timezone, using default: ${calendarCheckError.message}`);
+      }
+
+      const appointmentTimezone = updates.timezone || 'America/Sao_Paulo';
+
+      const event = {};
+      if (updates.title) event.summary = updates.title;
+      if (updates.description) event.description = updates.description;
+      
+      if (updates.startTime) {
+        // Convert to calendar's timezone if different
+        const startDate = new Date(updates.startTime);
+        const formatDateTimeForTimezone = (date, timezone) => {
+          const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: timezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          });
+          
+          const parts = formatter.formatToParts(date);
+          const year = parts.find(p => p.type === 'year').value;
+          const month = parts.find(p => p.type === 'month').value;
+          const day = parts.find(p => p.type === 'day').value;
+          const hour = parts.find(p => p.type === 'hour').value;
+          const minute = parts.find(p => p.type === 'minute').value;
+          const second = parts.find(p => p.type === 'second').value;
+          
+          // Get timezone offset
+          const utcDate = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }));
+          const tzDate = new Date(date.toLocaleString('en-US', { timeZone: timezone }));
+          const offsetMs = tzDate.getTime() - utcDate.getTime();
+          const offsetHours = Math.floor(Math.abs(offsetMs) / (1000 * 60 * 60));
+          const offsetMinutes = Math.floor((Math.abs(offsetMs) % (1000 * 60 * 60)) / (1000 * 60));
+          const offsetSign = offsetMs >= 0 ? '+' : '-';
+          const offset = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
+          
+          return `${year}-${month}-${day}T${hour}:${minute}:${second}${offset}`;
+        };
+        
+        const startDateTimeInCalendarTZ = formatDateTimeForTimezone(startDate, calendarTimezone);
+        event.start = {
+          dateTime: startDateTimeInCalendarTZ,
+          timeZone: calendarTimezone
+        };
+      }
+      
+      if (updates.endTime) {
+        const endDate = new Date(updates.endTime);
+        const formatDateTimeForTimezone = (date, timezone) => {
+          const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: timezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          });
+          
+          const parts = formatter.formatToParts(date);
+          const year = parts.find(p => p.type === 'year').value;
+          const month = parts.find(p => p.type === 'month').value;
+          const day = parts.find(p => p.type === 'day').value;
+          const hour = parts.find(p => p.type === 'hour').value;
+          const minute = parts.find(p => p.type === 'minute').value;
+          const second = parts.find(p => p.type === 'second').value;
+          
+          // Get timezone offset
+          const utcDate = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }));
+          const tzDate = new Date(date.toLocaleString('en-US', { timeZone: timezone }));
+          const offsetMs = tzDate.getTime() - utcDate.getTime();
+          const offsetHours = Math.floor(Math.abs(offsetMs) / (1000 * 60 * 60));
+          const offsetMinutes = Math.floor((Math.abs(offsetMs) % (1000 * 60 * 60)) / (1000 * 60));
+          const offsetSign = offsetMs >= 0 ? '+' : '-';
+          const offset = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
+          
+          return `${year}-${month}-${day}T${hour}:${minute}:${second}${offset}`;
+        };
+        
+        const endDateTimeInCalendarTZ = formatDateTimeForTimezone(endDate, calendarTimezone);
+        event.end = {
+          dateTime: endDateTimeInCalendarTZ,
+          timeZone: calendarTimezone
+        };
+      }
+
+      // Get the existing event first (recommended by Google for partial updates)
+      let existingEvent;
+      try {
+        const getResponse = await calendar.events.get({
+          calendarId: owner.google_calendar_id,
+          eventId: eventId
+        });
+        existingEvent = getResponse.data;
+        log.debug(`Retrieved existing treatment event for update:`, {
+          existingStart: existingEvent.start?.dateTime,
+          existingEnd: existingEvent.end?.dateTime
+        });
+      } catch (getError) {
+        log.warn(`Could not retrieve existing treatment event ${eventId}, using patch method:`, getError.message);
+        // Fallback to patch if we can't get the event
+        const response = await calendar.events.patch({
+          calendarId: owner.google_calendar_id,
+          eventId: eventId,
+          resource: event,
+          sendUpdates: 'all'
+        });
+        return response.data;
+      }
+
+      // Merge updates with existing event (preserve all other fields)
+      const updatedEvent = {
+        ...existingEvent,
+        ...event,
+        // Ensure start and end are properly set
+        start: event.start || existingEvent.start,
+        end: event.end || existingEvent.end
+      };
+
+      log.info(`Updating Google Calendar treatment event ${eventId} for owner ${ownerId}:`, {
+        eventId,
+        calendarId: owner.google_calendar_id,
+        calendarTimezone,
+        updates: event,
+        mergedEvent: {
+          start: updatedEvent.start,
+          end: updatedEvent.end,
+          summary: updatedEvent.summary
+        }
+      });
+
+      // Use update method with full event resource (recommended by Google)
+      const response = await calendar.events.update({
+        calendarId: owner.google_calendar_id,
+        eventId: eventId,
+        resource: updatedEvent,
+        sendUpdates: 'all'
+      });
+
+      log.info(`Updated Google Calendar treatment event ${eventId} for owner ${ownerId}`, {
+        eventId: response.data.id,
+        htmlLink: response.data.htmlLink,
+        start: response.data.start?.dateTime,
+        end: response.data.end?.dateTime
+      });
+
+      await supa
+        .from('users')
+        .update({ last_calendar_sync: new Date().toISOString() })
+        .eq('id', ownerId);
+
+      return response.data;
+
+    } catch (error) {
+      log.error('Error updating treatment appointment in Google Calendar:', error);
       throw error;
     }
   }
