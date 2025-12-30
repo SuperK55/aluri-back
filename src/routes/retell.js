@@ -389,7 +389,7 @@ r.post('/retell/webhook', async (req, res) => {
               // Get owner info for template
               const { data: ownerData } = await supa
                 .from('users')
-                .select('name, business_name, whatsapp_phone_number')
+                .select('name, whatsapp_connected, whatsapp_phone_id, whatsapp_access_token')
                 .eq('id', ownerId)
                 .single();
               
@@ -397,10 +397,10 @@ r.post('/retell/webhook', async (req, res) => {
               const resourceType = lead.assigned_resource_type || 'doctor';
               const chatAgent = await agentManager.getChatAgentForOwner(
                 ownerId, 
-                resourceType === 'treatment' ? 'beauty' : 'medical'
+                resourceType === 'treatment' ? 'beauty_clinic' : 'clinic'
               );
               
-              if (ownerData?.whatsapp_phone_number && chatAgent) {
+              if (ownerData?.whatsapp_connected && ownerData?.whatsapp_phone_id && ownerData?.whatsapp_access_token && chatAgent) {
                 const firstName = String(lead.name || '').split(' ')[0] || 'Cliente';
                 const normalizedPhone = normalizePhoneNumber(patientPhone);
                 
@@ -417,7 +417,7 @@ r.post('/retell/webhook', async (req, res) => {
                       parameters: [
                         { type: 'text', text: firstName },                              // {{1}} - Client name
                         { type: 'text', text: chatAgent.agent_name || 'Assistente' },   // {{2}} - Agent name
-                        { type: 'text', text: ownerData?.business_name || 'Clínica' }   // {{3}} - Clinic name
+                        { type: 'text', text: ownerData?.name || 'Clínica' }   // {{3}} - Clinic name
                       ]
                     }
                   ]
@@ -453,7 +453,7 @@ r.post('/retell/webhook', async (req, res) => {
                         ...(lead.agent_variables || {}),
                         name: firstName,
                         client_name: lead.name,
-                        business_name: ownerData?.business_name || 'Clínica',
+                        business_name: ownerData?.name || 'Clínica',
                         agent_name: chatAgent.agent_name || 'Assistente'
                       },
                       last_message_at: new Date().toISOString()
@@ -480,7 +480,7 @@ r.post('/retell/webhook', async (req, res) => {
                       ...(lead.agent_variables || {}),
                       name: firstName,
                       client_name: lead.name,
-                      business_name: ownerData?.business_name || 'Clínica',
+                      business_name: ownerData?.name || 'Clínica',
                       agent_name: chatAgent.agent_name || 'Assistente'
                     },
                     last_message_at: new Date().toISOString()
@@ -502,7 +502,7 @@ r.post('/retell/webhook', async (req, res) => {
                       direction: 'outbound',
                       sender: 'system',
                       wa_message_id: templateResult?.messageId || null,
-                      body: `Template: initial_welcome - ${firstName}, ${chatAgent.agent_name || 'Assistente'}, ${ownerData?.business_name || 'Clínica'}`,
+                      body: `Template: initial_welcome - ${firstName}, ${chatAgent.agent_name || 'Assistente'}, ${ownerData?.name || 'Clínica'}`,
                       message_type: 'template',
                       is_template: true
                     });
@@ -1271,14 +1271,14 @@ r.post('/retell/check-availability', async (req, res) => {
       if (resourceType === 'doctor') {
         // Query for appointments with resource_type/resource_id
         const { data: appointmentsData } = await supa
-          .from('appointments')
-          .select('start_at, end_at')
+        .from('appointments')
+        .select('start_at, end_at')
           .eq('resource_type', 'doctor')
           .eq('resource_id', resourceId)
-          .gte('start_at', startOfDay.toISOString())
-          .lte('start_at', endOfDay.toISOString())
-          .eq('status', 'scheduled');
-        
+        .gte('start_at', startOfDay.toISOString())
+        .lte('start_at', endOfDay.toISOString())
+        .eq('status', 'scheduled');
+
         appointments = appointmentsData || [];
       } else if (resourceType === 'treatment') {
         // For treatments, use resource_type and resource_id fields
@@ -1759,6 +1759,12 @@ r.post('/retell/chat-webhook', async (req, res) => {
       const chatCost = evt.chat_cost || evt.chat?.chat_cost || null;
       const collectedVariables = evt.collected_variables || evt.chat?.collected_variables || null;
 
+      // Update metadata to mark chat_type as 'followup' for future conversations
+      const updatedMetadata = {
+        ...(chat.metadata || {}),
+        chat_type: 'followup'
+      };
+
       await supa
         .from('whatsapp_chats')
         .update({
@@ -1766,6 +1772,7 @@ r.post('/retell/chat-webhook', async (req, res) => {
           retell_chat_analysis: chatAnalysis,
           retell_chat_cost: chatCost,
           retell_collected_variables: collectedVariables,
+          metadata: updatedMetadata,
           updated_at: new Date().toISOString()
         })
         .eq('id', chat.id);
@@ -1773,7 +1780,8 @@ r.post('/retell/chat-webhook', async (req, res) => {
       log.info('Chat ended/analyzed:', {
         chatId: chat.id,
         retellChatId: chatId,
-        hasAnalysis: !!chatAnalysis
+        hasAnalysis: !!chatAnalysis,
+        chatType: 'followup'
       });
     }
 
@@ -1917,7 +1925,7 @@ r.post('/retell/chat-book-appointment', async (req, res) => {
 
     const { data: ownerData } = await supa
       .from('users')
-      .select('name, location, business_name')
+      .select('name, location')
       .eq('id', ownerId)
       .single();
 

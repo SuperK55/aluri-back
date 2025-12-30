@@ -42,7 +42,6 @@ export const verifyJWT = async (req, res, next) => {
         email: user.email,
         name: user.name,
         role: user.role || 'owner',
-        specialty: user.specialty,
         location: user.location
       };
 

@@ -426,13 +426,18 @@ cron.schedule('5 * * * *', async () => {
         // Get owner info
         const { data: ownerData } = await supa
           .from('users')
-          .select('name, business_name, whatsapp_phone_number')
+          .select('name, whatsapp_connected, whatsapp_phone_id, whatsapp_access_token')
           .eq('id', ownerId)
           .single();
         
         // Check if owner has WhatsApp Business connected
-        if (!ownerData?.whatsapp_phone_number) {
-          log.warn('Owner has no WhatsApp Business connected, falling back to Twilio:', { ownerId });
+        if (!ownerData?.whatsapp_connected || !ownerData?.whatsapp_phone_id || !ownerData?.whatsapp_access_token) {
+          log.warn('Owner has no WhatsApp Business connected, falling back to Twilio:', { 
+            ownerId,
+            whatsapp_connected: ownerData?.whatsapp_connected,
+            has_phone_id: !!ownerData?.whatsapp_phone_id,
+            has_access_token: !!ownerData?.whatsapp_access_token
+          });
           // Fallback to Twilio
           const twilioTo = lead.whatsapp || (String(lead.phone || '').startsWith('whatsapp:') ? lead.phone : `whatsapp:${lead.phone}`);
       await twilio.messages.create({
@@ -464,7 +469,7 @@ cron.schedule('5 * * * *', async () => {
               parameters: [
                 { type: 'text', text: firstName },
                 { type: 'text', text: chatAgent.agent_name || 'Assistente' },
-                { type: 'text', text: ownerData?.business_name || 'Clínica' }
+                { type: 'text', text: ownerData?.name || 'Clínica' }
               ]
             }
           ]
@@ -491,7 +496,7 @@ cron.schedule('5 * * * *', async () => {
               ...(lead.agent_variables || {}),
               name: firstName,
               client_name: lead.name,
-              business_name: ownerData?.business_name || 'Clínica',
+              business_name: ownerData?.name || 'Clínica',
               agent_name: chatAgent.agent_name || 'Assistente'
             },
             last_message_at: new Date().toISOString()
@@ -507,7 +512,7 @@ cron.schedule('5 * * * *', async () => {
               direction: 'outbound',
               sender: 'system',
               wa_message_id: templateResult?.messageId || null,
-              body: `Template: initial_welcome - ${firstName}, ${chatAgent.agent_name || 'Assistente'}, ${ownerData?.business_name || 'Clínica'}`,
+              body: `Template: initial_welcome - ${firstName}, ${chatAgent.agent_name || 'Assistente'}, ${ownerData?.name || 'Clínica'}`,
               message_type: 'template',
               is_template: true
             });
@@ -609,13 +614,18 @@ cron.schedule('5 * * * *', async () => {
         // Get user/owner info for agent variables
         const { data: ownerData } = await supa
           .from('users')
-          .select('name, business_name, whatsapp_phone_number')
+          .select('name, whatsapp_connected, whatsapp_phone_id, whatsapp_access_token')
           .eq('id', ownerId)
           .single();
         
         // Check if owner has WhatsApp Business connected
-        if (!ownerData?.whatsapp_phone_number) {
-          log.warn('Owner has no WhatsApp Business connected, falling back to Twilio:', { ownerId });
+        if (!ownerData?.whatsapp_connected || !ownerData?.whatsapp_phone_id || !ownerData?.whatsapp_access_token) {
+          log.warn('Owner has no WhatsApp Business connected, falling back to Twilio:', { 
+            ownerId,
+            whatsapp_connected: ownerData?.whatsapp_connected,
+            has_phone_id: !!ownerData?.whatsapp_phone_id,
+            has_access_token: !!ownerData?.whatsapp_access_token
+          });
           // Fallback to Twilio for owners without WhatsApp Business
           const twilioTo = lead.whatsapp || (String(lead.phone || '').startsWith('whatsapp:') ? lead.phone : `whatsapp:${lead.phone}`);
       await twilio.messages.create({
@@ -680,7 +690,7 @@ cron.schedule('5 * * * *', async () => {
               parameters: [
                 { type: 'text', text: firstName },                           // {{1}} - Client name
                 { type: 'text', text: chatAgent.agent_name || 'Assistente' }, // {{2}} - Agent name
-                { type: 'text', text: ownerData?.business_name || 'Clínica' }, // {{3}} - Clinic name
+                { type: 'text', text: ownerData?.name || 'Clínica' }, // {{3}} - Clinic name
                 { type: 'text', text: formattedSuggestedDate },               // {{4}} - Date user mentioned
                 { type: 'text', text: earlierSlots[0].formatted },            // {{5}} - First available slot
                 { type: 'text', text: earlierSlots[1].formatted }             // {{6}} - Second available slot
@@ -727,7 +737,7 @@ cron.schedule('5 * * * *', async () => {
                 client_name: lead.name,
                 resource_name: resourceName,
                 resource_type: resourceType,
-                business_name: ownerData?.business_name || 'Clínica',
+                business_name: ownerData?.name || 'Clínica',
                 agent_name: chatAgent.agent_name || 'Assistente',
                 suggested_date: formattedSuggestedDate,
                 available_slots: availableSlotsText,
@@ -766,7 +776,7 @@ cron.schedule('5 * * * *', async () => {
               client_name: lead.name,
               resource_name: resourceName,
               resource_type: resourceType,
-              business_name: ownerData?.business_name || 'Clínica',
+              business_name: ownerData?.name || 'Clínica',
               agent_name: chatAgent.agent_name || 'Assistente',
               suggested_date: formattedSuggestedDate,
               available_slots: availableSlotsText,
@@ -798,7 +808,7 @@ cron.schedule('5 * * * *', async () => {
               direction: 'outbound',
               sender: 'system',
               wa_message_id: templateResult?.messageId || null,
-              body: `Template: earlier_appointment_offer - ${firstName}, ${chatAgent.agent_name || 'Assistente'}, ${ownerData?.business_name || 'Clínica'}, ${formattedSuggestedDate}, ${earlierSlots[0].formatted}, ${earlierSlots[1].formatted}`,
+              body: `Template: earlier_appointment_offer - ${firstName}, ${chatAgent.agent_name || 'Assistente'}, ${ownerData?.name || 'Clínica'}, ${formattedSuggestedDate}, ${earlierSlots[0].formatted}, ${earlierSlots[1].formatted}`,
               message_type: 'template',
               is_template: true,
               payload: {

@@ -5,6 +5,7 @@ import { agentManager } from '../services/agentManager.js';
 import { getNowInSaoPaulo, getIsoStringNow, toIsoStringSaoPaulo } from '../utils/timezone.js';
 import { verifyApiToken } from '../middleware/verifyApiToken.js';
 import { verifyApiTokenFlexible } from '../middleware/verifyApiTokenFlexible.js';
+import { normalizePhoneNumber } from '../lib/retell.js';
 
 const router = Router();
 
@@ -41,8 +42,17 @@ router.post('/lead/submit', verifyApiToken, async (req, res) => {
       });
     }
 
-    // Clean phone number (remove spaces, dashes, etc.)
-    const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+    // Normalize phone number (handles Brazilian format and converts to E.164)
+    let cleanPhone;
+    try {
+      cleanPhone = normalizePhoneNumber(phone);
+    } catch (error) {
+      log.warn(`Phone number normalization failed for ${phone}:`, error.message);
+      return res.status(400).json({
+        ok: false,
+        error: `Invalid phone number format: ${error.message}`
+      });
+    }
 
     // Check for duplicate leads (same phone number in last 24 hours)
     const yesterday = new Date();
@@ -259,7 +269,7 @@ router.post('/lead/submit', verifyApiToken, async (req, res) => {
 router.post('/lead/submit/webhook', verifyApiTokenFlexible, async (req, res) => {
   try {
     const authenticatedOwnerId = req.user.id;
-    const serviceType = req.user.service_type; // 'medical_clinic' or 'beauty_clinic'
+    const serviceType = req.user.service_type; // 'clinic' or 'beauty_clinic'
 
     log.info('Webhook lead submission received from owner:', authenticatedOwnerId);
 
@@ -274,7 +284,7 @@ router.post('/lead/submit/webhook', verifyApiTokenFlexible, async (req, res) => 
       ownerServiceType = ownerInfo?.service_type;
     }
 
-    const isMedicalClinic = ownerServiceType === 'medical_clinic';
+    const isClinic = ownerServiceType === 'clinic';
     const isBeautyClinic = ownerServiceType === 'beauty_clinic';
 
     // Parse incoming data - handle different webhook formats
@@ -350,15 +360,24 @@ router.post('/lead/submit/webhook', verifyApiTokenFlexible, async (req, res) => 
 
     // Service-specific validation (optional for webhooks - some forms may not capture all fields)
     // We'll log warnings but not reject the request
-    if (isMedicalClinic && !specialty) {
+    if (isClinic && !specialty) {
       log.warn('Medical clinic webhook missing specialty field');
     }
     if (isBeautyClinic && !treatment_name) {
       log.warn('Beauty clinic webhook missing treatment_name field');
     }
 
-    // Clean phone number (keep only digits and +)
-    const cleanPhone = phoneNumber.replace(/[^\d+]/g, '');
+    // Normalize phone number (handles Brazilian format and converts to E.164)
+    let cleanPhone;
+    try {
+      cleanPhone = normalizePhoneNumber(phoneNumber);
+    } catch (error) {
+      log.warn(`Phone number normalization failed for ${phoneNumber}:`, error.message);
+      return res.status(400).json({
+        ok: false,
+        error: `Invalid phone number format: ${error.message}`
+      });
+    }
 
     // Prepare lead data
     const leadData = {
@@ -384,7 +403,7 @@ router.post('/lead/submit/webhook', verifyApiTokenFlexible, async (req, res) => 
     };
 
     // Add service-specific fields
-    if (isMedicalClinic) {
+    if (isClinic) {
       leadData.specialty = specialty?.trim();
       leadData.reason = reason?.trim();
     } else if (isBeautyClinic) {
@@ -667,7 +686,17 @@ router.post('/lead/demo', verifyApiToken, async (req, res) => {
       });
     }
 
-    const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+    // Normalize phone number (handles Brazilian format and converts to E.164)
+    let cleanPhone;
+    try {
+      cleanPhone = normalizePhoneNumber(phone);
+    } catch (error) {
+      log.warn(`Phone number normalization failed for ${phone}:`, error.message);
+      return res.status(400).json({
+        ok: false,
+        error: `Invalid phone number format: ${error.message}`
+      });
+    }
 
     const { data: newLead, error: leadError } = await supa
       .from('leads')

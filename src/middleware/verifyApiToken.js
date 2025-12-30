@@ -41,7 +41,7 @@ export const verifyApiToken = async (req, res, next) => {
         
         const { data: user, error: userError } = await supa
           .from('users')
-          .select('id, email, name, role, specialty, service_type, is_active')
+          .select('id, email, name, role, service_type, is_active')
           .eq('id', decoded.id)
           .eq('is_active', true)
           .single();
@@ -58,7 +58,6 @@ export const verifyApiToken = async (req, res, next) => {
           email: user.email,
           name: user.name,
           role: user.role,
-          specialty: user.specialty,
           service_type: user.service_type
         };
         req.authType = 'jwt';
@@ -94,7 +93,7 @@ export const verifyApiToken = async (req, res, next) => {
 
     const { data: user, error: userError } = await supa
       .from('users')
-      .select('id, email, name, role, specialty, service_type, is_active')
+      .select('id, email, name, role, service_type, is_active')
       .eq('id', apiToken.owner_id)
       .eq('is_active', true)
       .single();
@@ -118,7 +117,6 @@ export const verifyApiToken = async (req, res, next) => {
       email: user.email,
       name: user.name,
       role: user.role,
-      specialty: user.specialty,
       service_type: user.service_type
     };
     req.apiToken = {
@@ -133,6 +131,6 @@ export const verifyApiToken = async (req, res, next) => {
     return res.status(500).json({
       ok: false,
       error: 'Authentication error'
-    });
+    }); 
   }
 };
