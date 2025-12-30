@@ -242,7 +242,7 @@ router.get('/auth/verify', async (req, res) => {
         email: user.email,
         name: user.name,
         role: user.role,
-        service_type: user.service_type || 'medical_clinic',
+        service_type: user.service_type || 'clinic',
         location: user.location,
         social_proof_enabled: user.social_proof_enabled,
         social_proof_text: user.social_proof_text,
