@@ -46,6 +46,11 @@
             "type": "boolean",
             "name": "scarity_method",
             "description": "The user wants an earlier date than the one we suggested. Therefore, you suggest you will check the availability of the earlier date and will contact the user via whatsapp."
+        },
+        {
+            "type": "string",
+            "name": "suggested_date",
+            "description": "Must be '{{suggested_date}}'"
         }
     ],
     "version": 0,

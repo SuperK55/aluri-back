@@ -244,7 +244,7 @@ router.get('/users/me', verifyJWT, async (req, res) => {
 
     const { data: user, error } = await supa
       .from('users')
-      .select('id, email, name, service_type, role, is_active, location, working_hours, date_specific_availability, timezone, social_proof_enabled, social_proof_text, google_calendar_id, calendar_sync_enabled, last_calendar_sync, twilio_phone_number, twilio_subaccount_sid')
+      .select('id, email, name, service_type, role, is_active, location, working_hours, date_specific_availability, timezone, social_proof_enabled, social_proof_text, google_calendar_id, calendar_sync_enabled, last_calendar_sync, twilio_phone_number, twilio_subaccount_sid, whatsapp_connected, default_chat_agent_id')
       .eq('id', userId)
       .single();
 
