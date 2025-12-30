@@ -223,7 +223,7 @@ class AgentManager {
           conversation_flow_id: conversationFlowResponse.conversation_flow_id,
           language: 'pt-BR',
           custom_variables: {},
-          is_active: true,
+          is_active: false,
           is_published: true
       };
 
@@ -320,7 +320,7 @@ class AgentManager {
               conversation_flow_id: chatConversationFlowResponse.conversation_flow_id,
               language: 'pt-BR',
               custom_variables: {},
-              is_active: true,
+              is_active: false,
               is_published: true
             })
             .select()
