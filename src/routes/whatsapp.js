@@ -10,6 +10,86 @@ import { agentManager } from '../services/agentManager.js';
 const router = Router();
 
 /**
+ * Get all scheduled appointments for a lead and format them for agent context
+ * @param {string} leadId - The lead ID
+ * @returns {Object} - Formatted appointments data for agent_variables
+ */
+async function getAllAppointmentsForLead(leadId) {
+  try {
+    if (!leadId) return { all_appointments: '', appointments_list: [] };
+
+    const { data: appointments, error } = await supa
+      .from('appointments')
+      .select(`
+        id,
+        start_at,
+        end_at,
+        resource_type,
+        resource_id,
+        status,
+        doctors(id, name),
+        treatments(id, treatment_name)
+      `)
+      .eq('lead_id', leadId)
+      .eq('status', 'scheduled')
+      .order('start_at', { ascending: true });
+
+    if (error || !appointments || appointments.length === 0) {
+      return { all_appointments: '', appointments_list: [] };
+    }
+
+    // Format appointments for display
+    const formattedAppointments = appointments.map((apt, index) => {
+      const startDate = new Date(apt.start_at);
+      
+      // Format date in Brazilian format
+      const day = String(startDate.getDate()).padStart(2, '0');
+      const month = String(startDate.getMonth() + 1).padStart(2, '0');
+      const year = startDate.getFullYear();
+      const dateStr = `${day}/${month}/${year}`;
+      
+      // Format time
+      const hours = String(startDate.getHours()).padStart(2, '0');
+      const minutes = String(startDate.getMinutes()).padStart(2, '0');
+      const timeStr = `${hours}:${minutes}`;
+      
+      // Get resource name
+      let resourceName = 'Consulta';
+      if (apt.resource_type === 'doctor' && apt.doctors) {
+        resourceName = apt.doctors.name || 'Médico';
+      } else if (apt.resource_type === 'treatment' && apt.treatments) {
+        resourceName = apt.treatments.treatment_name || 'Tratamento';
+      }
+
+      return {
+        id: apt.id,
+        date: dateStr,
+        time: timeStr,
+        date_iso: `${year}-${month}-${day}`,
+        time_24h: timeStr,
+        resource_name: resourceName,
+        resource_type: apt.resource_type,
+        formatted: `${dateStr} às ${timeStr} com ${resourceName}`
+      };
+    });
+
+    // Create a readable text list for the agent
+    const appointmentsText = formattedAppointments
+      .map((apt, index) => `${index + 1}. ${apt.formatted}`)
+      .join('\n');
+
+    return {
+      all_appointments: appointmentsText,
+      appointments_list: formattedAppointments,
+      appointments_count: formattedAppointments.length
+    };
+  } catch (error) {
+    log.error('Error fetching appointments for lead:', error);
+    return { all_appointments: '', appointments_list: [] };
+  }
+}
+
+/**
  * WhatsApp templates to create automatically
  * These templates are created when a user connects their WhatsApp Business account
  */
@@ -1200,6 +1280,9 @@ router.post('/webhook', async (req, res) => {
                                 log.info('Including previous chat history in followup conversation');
                               }
 
+                                // Get all appointments for this lead
+                                const appointmentsData = lead?.id ? await getAllAppointmentsForLead(lead.id) : { all_appointments: '', appointments_count: 0 };
+
                                 const chatVariables = {
                                   ...(lead?.agent_variables || {}),
                                   ...slotVariables, // Include available slots from WhatsApp chat
@@ -1208,6 +1291,8 @@ router.post('/webhook', async (req, res) => {
                                   lead_id: String(lead?.id || ''),
                                   business_name: ownerData?.name || '',
                                   location: ownerData?.location || '',
+                                  all_appointments: appointmentsData.all_appointments,
+                                  appointments_count: appointmentsData.appointments_count || 0,
                                   ...(previousChatHistory ? { previous_chat_history: previousChatHistory } : {})
                                 };
 
@@ -1229,6 +1314,9 @@ router.post('/webhook', async (req, res) => {
                                   }
                                 });
 
+                                // Get all appointments for this lead
+                                const appointmentsDataForUpdate = lead?.id ? await getAllAppointmentsForLead(lead.id) : { all_appointments: '', appointments_count: 0 };
+
                                 await supa
                                   .from('whatsapp_chats')
                                   .update({ 
@@ -1237,6 +1325,12 @@ router.post('/webhook', async (req, res) => {
                                     agent_id: chatAgent.retell_agent_id,
                                     last_message_at: new Date().toISOString(),
                                     updated_at: new Date().toISOString(),
+                                    agent_variables: {
+                                      ...(existingChat.agent_variables || {}),
+                                      ...chatVariables,
+                                      all_appointments: appointmentsDataForUpdate.all_appointments,
+                                      appointments_count: appointmentsDataForUpdate.appointments_count || 0
+                                    },
                                     metadata: {
                                       ...existingChat.metadata,
                                       chat_type: 'followup',
@@ -1432,6 +1526,9 @@ router.post('/webhook', async (req, res) => {
                               }
                             }
 
+                            // Get all appointments for this lead
+                            const appointmentsDataForRetell = lead?.id ? await getAllAppointmentsForLead(lead.id) : { all_appointments: '', appointments_count: 0 };
+
                             const chatVariables = {
                               ...(lead?.agent_variables || {}),
                               ...slotVariables, // Include available slots from WhatsApp chat
@@ -1440,6 +1537,8 @@ router.post('/webhook', async (req, res) => {
                               lead_id: String(lead?.id || ''),
                               business_name: ownerData?.name || '',
                               location: ownerData?.location || '',
+                              all_appointments: appointmentsDataForRetell.all_appointments,
+                              appointments_count: appointmentsDataForRetell.appointments_count || 0,
                               ...(previousChatHistory ? { previous_chat_history: previousChatHistory } : {})
                             };
 
@@ -1468,6 +1567,9 @@ router.post('/webhook', async (req, res) => {
 
                           const chatLeadId = lead?.id || null;
                           
+                          // Get all appointments for this lead
+                          const appointmentsDataForNewChat = chatLeadId ? await getAllAppointmentsForLead(chatLeadId) : { all_appointments: '', appointments_count: 0 };
+                          
                           // #region agent log
                           fetch('http://localhost:7243/ingest/fa704248-e3dd-4b0a-ab9f-643803e5688c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'whatsapp.js:1013',message:'Creating new chat record',data:{ownerId,leadId:chatLeadId,waPhone,hasLead:!!lead,phoneNumber},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
                           // #endregion
@@ -1493,6 +1595,16 @@ router.post('/webhook', async (req, res) => {
                                 metadata: {
                                   chat_type: determinedChatType,
                                   service_type: serviceType
+                                },
+                                agent_variables: {
+                                  ...(lead?.agent_variables || {}),
+                                  name: String(lead?.name || 'Cliente'),
+                                  client_name: lead?.name || 'Cliente',
+                                  business_name: ownerData?.name || '',
+                                  location: ownerData?.location || '',
+                                  agent_name: chatAgent.agent_name || 'Assistente',
+                                  all_appointments: appointmentsDataForNewChat.all_appointments,
+                                  appointments_count: appointmentsDataForNewChat.appointments_count || 0
                                 },
                                 last_message_at: new Date().toISOString()
                               })
@@ -1524,6 +1636,16 @@ router.post('/webhook', async (req, res) => {
                               metadata: {
                                 chat_type: determinedChatType,
                                 service_type: serviceType
+                              },
+                              agent_variables: {
+                                ...(lead?.agent_variables || {}),
+                                name: String(lead?.name || 'Cliente'),
+                                client_name: lead?.name || 'Cliente',
+                                business_name: ownerData?.name || '',
+                                location: ownerData?.location || '',
+                                agent_name: chatAgent.agent_name || 'Assistente',
+                                all_appointments: appointmentsDataForNewChat.all_appointments,
+                                appointments_count: appointmentsDataForNewChat.appointments_count || 0
                               },
                               last_message_at: new Date().toISOString()
                             })

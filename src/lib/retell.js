@@ -212,3 +212,46 @@ export async function retellGetChat(chatId) {
     throw new Error(`Failed to get Retell chat: ${error.response?.data?.message || error.message}`);
   }
 }
+
+export async function retellUpdateChat(chatId, opts) {
+  try {
+    if (!chatId) {
+      throw new Error('Chat ID is required');
+    }
+
+    const payload = {};
+
+    if (opts.override_dynamic_variables) {
+      payload.override_dynamic_variables = opts.override_dynamic_variables;
+    }
+
+    if (opts.metadata) {
+      payload.metadata = opts.metadata;
+    }
+
+    if (opts.data_storage_setting) {
+      payload.data_storage_setting = opts.data_storage_setting;
+    }
+
+    if (opts.custom_attributes) {
+      payload.custom_attributes = opts.custom_attributes;
+    }
+
+    const response = await axios.patch(
+      `https://api.retellai.com/update-chat/${chatId}`,
+      payload,
+      {
+        headers: {
+          'Authorization': `Bearer ${env.RETELL_API_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    console.log('Retell chat updated:', chatId);
+    return response.data;
+  } catch (error) {
+    console.error('Retell update chat error:', error.response?.data || error.message);
+    throw new Error(`Failed to update Retell chat: ${error.response?.data?.message || error.message}`);
+  }
+}

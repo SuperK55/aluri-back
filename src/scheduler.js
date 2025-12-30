@@ -40,6 +40,86 @@ async function isLeadAlreadyBeingProcessed(leadId) {
 }
 
 /**
+ * Get all scheduled appointments for a lead and format them for agent context
+ * @param {string} leadId - The lead ID
+ * @returns {Object} - Formatted appointments data for agent_variables
+ */
+async function getAllAppointmentsForLead(leadId) {
+  try {
+    if (!leadId) return { all_appointments: '', appointments_list: [] };
+
+    const { data: appointments, error } = await supa
+      .from('appointments')
+      .select(`
+        id,
+        start_at,
+        end_at,
+        resource_type,
+        resource_id,
+        status,
+        doctors(id, name),
+        treatments(id, treatment_name)
+      `)
+      .eq('lead_id', leadId)
+      .eq('status', 'scheduled')
+      .order('start_at', { ascending: true });
+
+    if (error || !appointments || appointments.length === 0) {
+      return { all_appointments: '', appointments_list: [] };
+    }
+
+    // Format appointments for display
+    const formattedAppointments = appointments.map((apt, index) => {
+      const startDate = new Date(apt.start_at);
+      
+      // Format date in Brazilian format
+      const day = String(startDate.getDate()).padStart(2, '0');
+      const month = String(startDate.getMonth() + 1).padStart(2, '0');
+      const year = startDate.getFullYear();
+      const dateStr = `${day}/${month}/${year}`;
+      
+      // Format time
+      const hours = String(startDate.getHours()).padStart(2, '0');
+      const minutes = String(startDate.getMinutes()).padStart(2, '0');
+      const timeStr = `${hours}:${minutes}`;
+      
+      // Get resource name
+      let resourceName = 'Consulta';
+      if (apt.resource_type === 'doctor' && apt.doctors) {
+        resourceName = apt.doctors.name || 'Médico';
+      } else if (apt.resource_type === 'treatment' && apt.treatments) {
+        resourceName = apt.treatments.treatment_name || 'Tratamento';
+      }
+
+      return {
+        id: apt.id,
+        date: dateStr,
+        time: timeStr,
+        date_iso: `${year}-${month}-${day}`,
+        time_24h: timeStr,
+        resource_name: resourceName,
+        resource_type: apt.resource_type,
+        formatted: `${dateStr} às ${timeStr} com ${resourceName}`
+      };
+    });
+
+    // Create a readable text list for the agent
+    const appointmentsText = formattedAppointments
+      .map((apt, index) => `${index + 1}. ${apt.formatted}`)
+      .join('\n');
+
+    return {
+      all_appointments: appointmentsText,
+      appointments_list: formattedAppointments,
+      appointments_count: formattedAppointments.length
+    };
+  } catch (error) {
+    log.error('Error fetching appointments for lead:', error);
+    return { all_appointments: '', appointments_list: [] };
+  }
+}
+
+/**
  * Find available slots before a given date for a resource (doctor or treatment)
  * Returns up to maxSlots slots formatted for WhatsApp template
  */
@@ -713,6 +793,9 @@ cron.schedule('5 * * * *', async () => {
         // Format available slots for agent context
         const availableSlotsText = earlierSlots.map(s => s.formatted).join('\n');
         
+        // Get all appointments for this lead to help with rescheduling
+        const appointmentsData = await getAllAppointmentsForLead(lead.id);
+        
         // Check for existing active chat for this phone number
         const { data: existingChat } = await supa
           .from('whatsapp_chats')
@@ -746,7 +829,10 @@ cron.schedule('5 * * * *', async () => {
                 slot_1_time: earlierSlots[0]?.time || '',
                 slot_2: earlierSlots[1]?.formatted || '',
                 slot_2_date: earlierSlots[1]?.date || '',
-                slot_2_time: earlierSlots[1]?.time || ''
+                slot_2_time: earlierSlots[1]?.time || '',
+                // Include all appointments for rescheduling context
+                all_appointments: appointmentsData.all_appointments,
+                appointments_count: appointmentsData.appointments_count || 0
               },
               last_message_at: new Date().toISOString()
             })
@@ -785,7 +871,10 @@ cron.schedule('5 * * * *', async () => {
               slot_1_time: earlierSlots[0]?.time || '',
               slot_2: earlierSlots[1]?.formatted || '',
               slot_2_date: earlierSlots[1]?.date || '',
-              slot_2_time: earlierSlots[1]?.time || ''
+              slot_2_time: earlierSlots[1]?.time || '',
+              // Include all appointments for rescheduling context
+              all_appointments: appointmentsData.all_appointments,
+              appointments_count: appointmentsData.appointments_count || 0
             },
             last_message_at: new Date().toISOString()
           })
