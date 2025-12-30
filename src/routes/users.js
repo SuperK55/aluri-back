@@ -139,7 +139,6 @@ router.post('/users', verifyJWT, requireAdmin, async (req, res) => {
       email,
       password,
       name,
-      specialty,
       service_type = 'clinic',
       role = 'owner',
       is_active = true,
@@ -175,14 +174,6 @@ router.post('/users', verifyJWT, requireAdmin, async (req, res) => {
       });
     }
 
-    // Validate specialty if provided
-    if (specialty && !['clinic', 'real_estate', 'consortia', 'insurance', 'beauty_clinic'].includes(specialty)) {
-      return res.status(400).json({
-        ok: false,
-        error: 'Invalid specialty. Must be one of: clinic, real_estate, consortia, insurance, beauty_clinic'
-      });
-    }
-
     // Validate service_type if provided
     if (service_type && !['clinic', 'beauty_clinic', 'real_estate', 'insurance', 'consortia'].includes(service_type)) {
       return res.status(400).json({
@@ -215,13 +206,12 @@ router.post('/users', verifyJWT, requireAdmin, async (req, res) => {
         email: email.toLowerCase(),
         password: password_hash,
         name,
-        specialty: specialty || null,
         service_type: service_type || 'clinic',
         role,
         is_active,
         location: location.trim()
       })
-      .select('id, email, name, specialty, service_type, role, is_active, location, created_at, updated_at')
+      .select('id, email, name, service_type, role, is_active, location, created_at, updated_at')
       .single();
 
     if (userError) {
@@ -378,7 +368,6 @@ router.patch('/users/:id', verifyJWT, requireAdmin, async (req, res) => {
     const {
       email,
       name,
-      specialty,
       service_type,
       role,
       is_active,
@@ -389,7 +378,6 @@ router.patch('/users/:id', verifyJWT, requireAdmin, async (req, res) => {
     const updates = {};
     if (email !== undefined) updates.email = email.toLowerCase();
     if (name !== undefined) updates.name = name;
-    if (specialty !== undefined) updates.specialty = specialty;
     if (role !== undefined) {
       if (!['admin', 'owner'].includes(role)) {
         return res.status(400).json({
@@ -398,15 +386,6 @@ router.patch('/users/:id', verifyJWT, requireAdmin, async (req, res) => {
         });
       }
       updates.role = role;
-    }
-    if (specialty !== undefined) {
-      if (specialty && !['clinic', 'real_estate', 'consortia', 'insurance', 'beauty_clinic'].includes(specialty)) {
-        return res.status(400).json({
-          ok: false,
-          error: 'Invalid specialty. Must be one of: clinic, real_estate, consortia, insurance, beauty_clinic'
-        });
-      }
-      updates.specialty = specialty;
     }
     if (service_type !== undefined) {
       if (service_type && !['clinic', 'beauty_clinic', 'real_estate', 'insurance', 'consortia'].includes(service_type)) {
