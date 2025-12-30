@@ -1094,7 +1094,7 @@ router.post('/webhook', async (req, res) => {
                           .from('whatsapp_chats')
                           .select('*')
                           .eq('wa_phone', waPhone)
-                          .in('status', ['ended', 'completed'])
+                          .in('status', ['closed', 'ended', 'completed'])
                           .order('updated_at', { ascending: false })
                           .limit(1)
                           .maybeSingle();
@@ -1158,6 +1158,35 @@ router.post('/webhook', async (req, res) => {
                                 if (chatVars.available_slots) slotVariables.available_slots = String(chatVars.available_slots);
                                 if (chatVars.suggested_date) slotVariables.suggested_date = String(chatVars.suggested_date);
                               }
+
+                              // Get previous chat history for followup context
+                              let previousChatHistory = '';
+                              if (existingChat?.id) {
+                                try {
+                                  // Try to get chat summary from retell_chat_analysis first (more concise)
+                                  if (existingChat.retell_chat_analysis?.chat_summary) {
+                                    previousChatHistory = `Resumo da conversa anterior: ${existingChat.retell_chat_analysis.chat_summary}`;
+                                  } else {
+                                    // Fallback: Get messages from whatsapp_messages table
+                                    const { data: previousMessages } = await supa
+                                      .from('whatsapp_messages')
+                                      .select('body, sender, direction, created_at')
+                                      .eq('chat_id', existingChat.id)
+                                      .order('created_at', { ascending: true })
+                                      .limit(20); // Limit to last 20 messages to avoid token limits
+                                    
+                                    if (previousMessages && previousMessages.length > 0) {
+                                      const formattedMessages = previousMessages.map(msg => {
+                                        const senderLabel = msg.sender === 'user' ? 'Cliente' : 'Assistente';
+                                        return `${senderLabel}: ${msg.body}`;
+                                      }).join('\n');
+                                      previousChatHistory = `Histórico da conversa anterior:\n${formattedMessages}`;
+                                    }
+                                  }
+                                } catch (historyError) {
+                                  log.warn('Error retrieving previous chat history:', historyError);
+                                }
+                              }
                               
                               if (Object.keys(slotVariables).length > 0) {
                                 log.info('Including available slots in Retell chat (followup):', {
@@ -1167,6 +1196,10 @@ router.post('/webhook', async (req, res) => {
                                 });
                               }
 
+                              if (previousChatHistory) {
+                                log.info('Including previous chat history in followup conversation');
+                              }
+
                                 const chatVariables = {
                                   ...(lead?.agent_variables || {}),
                                   ...slotVariables, // Include available slots from WhatsApp chat
@@ -1174,7 +1207,8 @@ router.post('/webhook', async (req, res) => {
                                   name: String(lead?.name || 'Cliente'),
                                   lead_id: String(lead?.id || ''),
                                   business_name: ownerData?.name || '',
-                                  location: ownerData?.location || ''
+                                  location: ownerData?.location || '',
+                                  ...(previousChatHistory ? { previous_chat_history: previousChatHistory } : {})
                                 };
 
                                 Object.keys(chatVariables).forEach(key => {
@@ -1311,20 +1345,34 @@ router.post('/webhook', async (req, res) => {
                               .single();
 
                             // Get available slots from existing chat if it exists
-                            // First try to get from existingChat (if found earlier), otherwise query for it
+                            // First try to get from existingChat or existingEndedChat (if found earlier), otherwise query for it
                             let slotVariables = {};
-                            let chatWithSlots = existingChat;
+                            let chatWithSlots = existingChat || existingEndedChat;
+                            let previousChatType = null;
+                            let previousChatId = null;
                             
-                            if (!chatWithSlots && waPhone) {
-                              // Query for existing chat to get slot information
+                            // Use existingEndedChat if available (it was already queried earlier)
+                            if (existingEndedChat && !chatWithSlots) {
+                              chatWithSlots = existingEndedChat;
+                            }
+                            
+                            if (chatWithSlots) {
+                              previousChatType = chatWithSlots.metadata?.chat_type;
+                              previousChatId = chatWithSlots.id;
+                            } else if (waPhone) {
+                              // Query for existing chat to get slot information and check if it's a followup
+                              // Prioritize closed/ended chats to detect followup conversations
                               const { data: chatData } = await supa
                                 .from('whatsapp_chats')
-                                .select('agent_variables')
+                                .select('id, agent_variables, metadata, retell_chat_analysis, status')
                                 .eq('wa_phone', waPhone)
-                                .order('last_message_at', { ascending: false })
+                                .in('status', ['closed', 'ended', 'completed'])
+                                .order('updated_at', { ascending: false })
                                 .limit(1)
                                 .maybeSingle();
                               chatWithSlots = chatData;
+                              previousChatType = chatData?.metadata?.chat_type;
+                              previousChatId = chatData?.id;
                             }
                             
                             if (chatWithSlots?.agent_variables) {
@@ -1339,14 +1387,60 @@ router.post('/webhook', async (req, res) => {
                               if (chatVars.suggested_date) slotVariables.suggested_date = String(chatVars.suggested_date);
                             }
 
+                            // Determine chat_type: if previous chat was marked as 'followup', use 'followup'
+                            // Otherwise, use 'welcome' for leads or 'other' for new conversations
+                            let determinedChatType = 'other';
+                            if (previousChatType === 'followup') {
+                              determinedChatType = 'followup';
+                            } else if (lead) {
+                              determinedChatType = 'welcome';
+                            }
+
+                            // Get previous chat history for followup context
+                            let previousChatHistory = '';
+                            if (determinedChatType === 'followup' && previousChatId) {
+                              try {
+                                // Get the previous chat to access its analysis
+                                const { data: previousChat } = await supa
+                                  .from('whatsapp_chats')
+                                  .select('retell_chat_analysis')
+                                  .eq('id', previousChatId)
+                                  .single();
+                                
+                                // Try to get chat summary from retell_chat_analysis first (more concise)
+                                if (previousChat?.retell_chat_analysis?.chat_summary) {
+                                  previousChatHistory = `Resumo da conversa anterior: ${previousChat.retell_chat_analysis.chat_summary}`;
+                                } else {
+                                  // Fallback: Get messages from whatsapp_messages table
+                                  const { data: previousMessages } = await supa
+                                    .from('whatsapp_messages')
+                                    .select('body, sender, direction, created_at')
+                                    .eq('chat_id', previousChatId)
+                                    .order('created_at', { ascending: true })
+                                    .limit(20); // Limit to last 20 messages to avoid token limits
+                                  
+                                  if (previousMessages && previousMessages.length > 0) {
+                                    const formattedMessages = previousMessages.map(msg => {
+                                      const senderLabel = msg.sender === 'user' ? 'Cliente' : 'Assistente';
+                                      return `${senderLabel}: ${msg.body}`;
+                                    }).join('\n');
+                                    previousChatHistory = `Histórico da conversa anterior:\n${formattedMessages}`;
+                                  }
+                                }
+                              } catch (historyError) {
+                                log.warn('Error retrieving previous chat history:', historyError);
+                              }
+                            }
+
                             const chatVariables = {
                               ...(lead?.agent_variables || {}),
                               ...slotVariables, // Include available slots from WhatsApp chat
-                              chat_type: lead ? 'welcome' : 'other',
+                              chat_type: determinedChatType,
                               name: String(lead?.name || 'Cliente'),
                               lead_id: String(lead?.id || ''),
                               business_name: ownerData?.name || '',
-                              location: ownerData?.location || ''
+                              location: ownerData?.location || '',
+                              ...(previousChatHistory ? { previous_chat_history: previousChatHistory } : {})
                             };
 
                             Object.keys(chatVariables).forEach(key => {
@@ -1361,7 +1455,7 @@ router.post('/webhook', async (req, res) => {
                               metadata: {
                                 lead_id: lead?.id || null,
                                 owner_id: ownerId,
-                                chat_type: lead ? 'welcome' : 'other',
+                                chat_type: determinedChatType,
                                 wa_phone: waPhone
                               }
                             });
@@ -1397,7 +1491,7 @@ router.post('/webhook', async (req, res) => {
                                 agent_id: chatAgent.retell_agent_id,
                                 status: 'open',
                                 metadata: {
-                                  chat_type: lead ? 'welcome' : 'other',
+                                  chat_type: determinedChatType,
                                   service_type: serviceType
                                 },
                                 last_message_at: new Date().toISOString()
@@ -1428,7 +1522,7 @@ router.post('/webhook', async (req, res) => {
                               agent_id: chatAgent.retell_agent_id,
                               status: 'open',
                               metadata: {
-                                chat_type: lead ? 'welcome' : 'other',
+                                chat_type: determinedChatType,
                                 service_type: serviceType
                               },
                               last_message_at: new Date().toISOString()
