@@ -225,14 +225,10 @@ router.get('/chat', verifyJWT, async (req, res) => {
 router.post('/:agentId/configure-twilio', verifyJWT, async (req, res) => {
   try {
     const { agentId } = req.params;
-    const { sub_account_name, area_code, country_code = 'BR' } = req.body;
+    const { area_code, country_code = 'BR' } = req.body;
 
-    if (!sub_account_name) {
-      return res.status(400).json({
-        ok: false,
-        error: 'Sub-account name is required'
-      });
-    }
+    // Use user's name automatically for sub-account name
+    const sub_account_name = req.user.name || 'User Account';
 
     // Verify agent ownership and get agent info
     const { data: agent, error: agentError } = await supa
@@ -302,7 +298,7 @@ router.post('/:agentId/configure-twilio', verifyJWT, async (req, res) => {
       twilioSubAccount.sid,
       twilioSubAccount.authToken,
       retellClient,
-      `${sub_account_name} - ${agent.agent_name}`
+      `${sub_account_name} - ${agent.agent_name || 'Agent'}`
     );
     log.info(`Phone number ${purchasedPhone.phoneNumber} imported to Retell`);
 
