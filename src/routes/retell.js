@@ -811,6 +811,17 @@ r.post('/retell/webhook', async (req, res) => {
 
           const appointmentId = appointmentInsert?.id || null;
 
+          // Get all appointments for this lead AFTER creating the new appointment
+          // This ensures the newly created appointment is included in the count
+          const appointmentsData = await getAllAppointmentsForLead(lead.id);
+          
+          log.info('Fetched appointments after creation:', {
+            leadId: lead.id,
+            appointmentId,
+            appointmentsCount: appointmentsData.appointments_count,
+            allAppointments: appointmentsData.all_appointments
+          });
+
           let googleEventId = null;
           if (googleCalendarEnabled && appointmentId) {
             try {
@@ -897,10 +908,8 @@ r.post('/retell/webhook', async (req, res) => {
           const chatAgent = await agentManager.getChatAgentForOwner(ownerId, serviceType);
           let retellChatId = null;
 
-          // Get all appointments for this lead to help with rescheduling
-          const appointmentsData = await getAllAppointmentsForLead(lead.id);
-
           // Prepare dynamic variables for Retell chat
+          // Note: appointmentsData was already fetched above after appointment creation
           const chatVariables = {
             ...(lead.agent_variables || {}),
             chat_type: 'confirm_appointment',
