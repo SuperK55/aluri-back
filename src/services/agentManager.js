@@ -490,7 +490,7 @@ class AgentManager {
       // Get owner information for business details and service type
       const { data: owner, error: ownerError } = await supa
         .from('users')
-        .select('name, specialty, social_proof_enabled, social_proof_text, service_type')
+        .select('name, social_proof_enabled, social_proof_text, service_type')
         .eq('id', agent.owner_id)
         .single();
 
