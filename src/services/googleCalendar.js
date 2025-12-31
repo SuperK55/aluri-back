@@ -43,6 +43,7 @@ class GoogleCalendarService {
       const expiresAt = doctor.google_token_expires_at ? new Date(doctor.google_token_expires_at) : null;
 
       if (!expiresAt || now >= expiresAt) {
+        try {
         // Refresh access token
         const { credentials } = await this.oauth2Client.refreshAccessToken();
         this.oauth2Client.setCredentials(credentials);
@@ -57,6 +58,32 @@ class GoogleCalendarService {
           .eq('id', doctorId);
 
         log.info(`Refreshed Google Calendar token for doctor ${doctorId}`);
+        } catch (refreshError) {
+          // Check if refresh token has expired or been revoked
+          const isInvalidGrant = refreshError.response?.data?.error === 'invalid_grant' || 
+                                 refreshError.message?.includes('invalid_grant') ||
+                                 refreshError.message?.includes('Token has been expired or revoked');
+
+          if (isInvalidGrant) {
+            log.warn(`Google Calendar refresh token expired for doctor ${doctorId}. Marking as disconnected.`);
+            
+            // Mark calendar as disconnected (but keep the calendar_id for reference)
+            await supa
+              .from('doctors')
+              .update({
+                calendar_sync_enabled: false,
+                google_refresh_token: null,
+                google_access_token: null,
+                google_token_expires_at: null
+              })
+              .eq('id', doctorId);
+
+            throw new Error('Google Calendar refresh token expired. Please reconnect your calendar.');
+          }
+          
+          // Re-throw other errors
+          throw refreshError;
+        }
       }
 
       return google.calendar({ version: 'v3', auth: this.oauth2Client });
@@ -277,6 +304,7 @@ class GoogleCalendarService {
       const expiresAt = owner.google_token_expires_at ? new Date(owner.google_token_expires_at) : null;
 
       if (!expiresAt || now >= expiresAt) {
+        try {
         // Refresh access token
         const { credentials } = await this.oauth2Client.refreshAccessToken();
         this.oauth2Client.setCredentials(credentials);
@@ -291,6 +319,32 @@ class GoogleCalendarService {
           .eq('id', ownerId);
 
         log.info(`Refreshed Google Calendar token for owner ${ownerId}`);
+        } catch (refreshError) {
+          // Check if refresh token has expired or been revoked
+          const isInvalidGrant = refreshError.response?.data?.error === 'invalid_grant' || 
+                                 refreshError.message?.includes('invalid_grant') ||
+                                 refreshError.message?.includes('Token has been expired or revoked');
+
+          if (isInvalidGrant) {
+            log.warn(`Google Calendar refresh token expired for owner ${ownerId}. Marking as disconnected.`);
+            
+            // Mark calendar as disconnected (but keep the calendar_id for reference)
+            await supa
+              .from('users')
+              .update({
+                calendar_sync_enabled: false,
+                google_refresh_token: null,
+                google_access_token: null,
+                google_token_expires_at: null
+              })
+              .eq('id', ownerId);
+
+            throw new Error('Google Calendar refresh token expired. Please reconnect your calendar.');
+          }
+          
+          // Re-throw other errors
+          throw refreshError;
+        }
       }
 
       return google.calendar({ version: 'v3', auth: this.oauth2Client });
