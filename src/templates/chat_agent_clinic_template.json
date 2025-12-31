@@ -210,7 +210,7 @@
             },
             "instruction": {
                 "type": "prompt",
-                "text": "CHAT TYPE: 'confirm_appointment' - User is REPLYING to our appointment_confirmation_doc template.\n\nThe template they received was:\n\"Olá {{name}}! 🎉\nSua consulta com o(a) Dr(a). {{doctor_name}} foi agendada!\n📅 Data: {{appointment_date}}\n⏰ Horário: {{appointment_time}}\n📍 Local: {{doctor_address}}\n💰 Valor: {{consultation_price}}\n\nPrecisa de alguma informação adicional? 😊\"\n\n## Your Task:\nACKNOWLEDGE their response. The appointment is ALREADY confirmed.\n\n## Based on user's response:\n\n**If user confirms/thanks (ok, obrigado, perfeito, entendido):**\n\"Ótimo, {{name}}! 😊\nQualquer dúvida, é só chamar aqui.\nAté o dia da consulta! 👋\"\n\n**If user asks about something (endereço, valor, como funciona):**\nAnswer their question directly.\n\n**If user wants to reschedule:**\n\"Sem problemas, {{name}}! 😊\nVamos encontrar um novo horário para você.\nPara qual dia você gostaria de remarcar?\"\nAnd confirm the date what the client want\n\n**If user wants to cancel:**\n\"Entendi, {{name}}. Posso cancelar o agendamento.\nPosso ajudar em outra coisa? 😊\"\n\nWait for response."
+                "text": "CHAT TYPE: 'confirm_appointment' - User is REPLYING to our appointment_confirmation_doc template.\n\nThe template they received was:\n\"Olá {{name}}! 🎉\nSua consulta com o(a) Dr(a). {{doctor_name}} foi agendada!\n📅 Data: {{appointment_date}}\n⏰ Horário: {{appointment_time}}\n📍 Local: {{doctor_address}}\n💰 Valor: {{consultation_price}}\n\nPrecisa de alguma informação adicional? 😊\"\n\n## Your Task:\nACKNOWLEDGE their response. The appointment is ALREADY confirmed.\n\n## Based on user's response:\n\n**If user confirms/thanks (ok, obrigado, perfeito, entendido):**\n\"Ótimo, {{name}}! 😊\nQualquer dúvida, é só chamar aqui.\nAté o dia da consulta! 👋\"\n\n**If user asks about something (endereço, valor, como funciona):**\nAnswer their question directly.\n\n**If user wants to reschedule:**\n- If {{appointments_count}} > 1:\n  \"Sem problemas, {{name}}! 😊\n  Vejo que você tem {{appointments_count}} agendamentos:\n  \n  {{all_appointments}}\n  \n  Qual deles você gostaria de remarcar?\"\n  Wait for user to specify which appointment.\n- If {{appointments_count}} == 1:\n  User has ONLY ONE appointment - DO NOT ask which one. Go directly to:\n  \"Sem problemas, {{name}}! 😊\n  Vamos encontrar um novo horário para você.\n  Para qual dia você gostaria de remarcar?\"\n  And confirm the date what the client wants.\n\n**If user wants to cancel:**\n\"Entendi, {{name}}. Posso cancelar o agendamento.\nPosso ajudar em outra coisa? 😊\"\n\nWait for response."
             }
         },
         {
@@ -265,7 +265,7 @@
             },
             "instruction": {
                 "type": "prompt",
-                "text": "CHAT TYPE: 'followup' - User is returning after a previous conversation ended.\n\nThis is a RETURNING user who previously chatted with us. Be welcoming but don't repeat old information.\n\n## Your Task:\nGreet them warmly and ask how you can help:\n\n\"Olá novamente, {{name}}! 😊\nComo posso te ajudar?\"\n\nWait for their response and then help accordingly:\n\n**If user asks about their existing appointment:**\nCheck and provide appointment details, offer to reschedule if needed.\n\n**If user has a new question:**\nAnswer directly and helpfully.\n\n**If user wants to schedule a new appointment:**\nShow available slots: \"Temos os seguintes horários disponíveis:\\n{{available_slots}}\\n\\nQual funciona para você? 📅\"\n\n**If user wants to reschedule:**\nGo to reschedule flow.\n\n**If user wants to cancel:**\nGo to cancel flow.\n\nWait for response."
+                "text": "CHAT TYPE: 'followup' - User is returning after a previous conversation ended.\n{{previous_chat_history}}\n\nThis is a RETURNING user who previously chatted with us. Be welcoming but don't repeat old information.\n\n## Your Task:\nGreet them warmly and ask how you can help:\n\n\"Olá novamente, {{name}}! 😊\nComo posso te ajudar?\"\n\nWait for their response and then help accordingly:\n\n**If user asks about their existing appointment(s):**\n- If {{appointments_count}} > 0, show all appointments:\n  \"Você tem os seguintes agendamentos:\n  \n  {{all_appointments}}\n  \n  Precisa de alguma informação ou quer remarcar algum? 😊\"\n- If {{appointments_count}} == 0:\n  \"Não encontrei agendamentos ativos no momento. Quer agendar uma consulta? 😊\"\n\n**If user has a new question:**\nAnswer directly and helpfully.\n\n**If user wants to schedule a new appointment:**\nShow available slots: \"Temos os seguintes horários disponíveis:\\n{{available_slots}}\\n\\nQual funciona para você? 📅\"\n\n**If user wants to reschedule:**\nGo to reschedule flow.\n\n**If user wants to cancel:**\nGo to cancel flow.\n\nWait for response."
             }
         },
         {
@@ -885,7 +885,7 @@
             },
             "instruction": {
                 "type": "prompt",
-                "text": "User wants to reschedule their existing appointment.\n\n\"Sem problemas, {{name}}! 😊\nVamos encontrar um novo horário para você.\nPara qual dia você gostaria de remarcar?\"\n\nWait user's response\n\n"
+                "text": "User wants to reschedule their existing appointment.\n\n## IMPORTANT: Check appointment count FIRST\n\n**If {{appointments_count}} > 1:**\nUser has MULTIPLE appointments - show all and ask which one:\n\n\"Sem problemas, {{name}}! 😊\nVejo que você tem {{appointments_count}} agendamentos:\n\n{{all_appointments}}\n\nQual deles você gostaria de remarcar? (Pode me dizer o número, a data ou o horário)\"\n\nWait for user to specify which appointment. They might say:\n- \"O primeiro\" or \"1\"\n- \"O de [date]\" (e.g., \"o de 15/11\")\n- \"O das [time]\" (e.g., \"o das 14:00\")\n- \"O com [doctor name]\"\n\nAfter user specifies, proceed to ask for new date/time.\n\n**If {{appointments_count}} == 1:**\nUser has ONLY ONE appointment - DO NOT ask which one. Go directly to asking for new date:\n\n\"Sem problemas, {{name}}! 😊\nVamos encontrar um novo horário para você.\nPara qual dia você gostaria de remarcar?\"\n\n**If {{appointments_count}} == 0:**\n\"Não encontrei agendamentos ativos para remarcar. Quer agendar uma nova consulta? 😊\"\n\nWait for user's response.\n\n"
             }
         },
         {
@@ -901,6 +901,12 @@
                 }
             ],
             "variables": [
+                {
+                    "name": "appointment_id",
+                    "description": "The ID of the appointment to reschedule. Extract this ONLY if the user explicitly specified which appointment from {{all_appointments}} (e.g., 'o primeiro', 'o de 15/11', 'o das 14:00', 'o número 1'). If user has only one appointment ({{appointments_count}} == 1) or didn't specify which one, leave this empty - the backend will use the most recent appointment. IMPORTANT: This field is optional - if you cannot determine the specific appointment_id, leave it empty.",
+                    "type": "string",
+                    "choices": []
+                },
                 {
                     "name": "new_date",
                     "description": "The new date the user wants to reschedule to in ISO format (YYYY-MM-DD). Extract from the conversation context.",
@@ -1002,33 +1008,26 @@
             }
         },
         {
-            "instruction": {
-                "type": "prompt",
-                "text": "  Perfeito! Obrigado(a) pelo seu tempo, {{name}}. Em nome do(a) Dr(a). {{doctor_name}}, será um prazer recebê-lo(a) para a consulta. Até breve!"
-            },
             "name": "Conversation",
             "edges": [
                 {
+                    "destination_node_id": "node-goodbye",
                     "id": "edge-1766080698247-jtvqnhqhu",
                     "transition_condition": {
                         "type": "prompt",
-                        "prompt": "Describe the transition condition"
+                        "prompt": "After receiving the response"
                     }
                 }
             ],
             "id": "node-1766080698247",
             "type": "conversation",
             "display_position": {
-                "x": 4899.486239867124,
-                "y": 1287.12481664911
+                "x": 4905.64008602097,
+                "y": 1234.047893572187
             },
-            "skip_response_edge": {
-                "destination_node_id": "node-goodbye",
-                "id": "edge-1766176304563",
-                "transition_condition": {
-                    "type": "prompt",
-                    "prompt": "Skip response"
-                }
+            "instruction": {
+                "type": "prompt",
+                "text": "  Perfeito! Obrigado(a) pelo seu tempo, {{name}}. Em nome do(a) Dr(a). {{doctor_name}}, será um prazer recebê-lo(a) para a consulta. Até breve!"
             }
         },
         {
