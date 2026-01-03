@@ -229,7 +229,9 @@ async function findAttemptByCallId(callId) {
  */
 async function getAllAppointmentsForLead(leadId) {
   try {
-    if (!leadId) return { all_appointments: '', appointments_list: [] };
+    if (!leadId) {
+      return { all_appointments: '', appointments_list: [], appointments_count: 0 };
+    }
 
     const { data: appointments, error } = await supa
       .from('appointments')
@@ -247,8 +249,20 @@ async function getAllAppointmentsForLead(leadId) {
       .eq('status', 'scheduled')
       .order('start_at', { ascending: true });
 
-    if (error || !appointments || appointments.length === 0) {
-      return { all_appointments: '', appointments_list: [] };
+    if (error) {
+      log.error('Error querying appointments:', { error, leadId, errorMessage: error.message });
+      return { all_appointments: '', appointments_list: [], appointments_count: 0 };
+    }
+
+    log.debug('Query result for getAllAppointmentsForLead:', {
+      leadId,
+      appointmentsFound: appointments?.length || 0,
+      appointments: appointments?.map(apt => ({ id: apt.id, status: apt.status, start_at: apt.start_at })) || []
+    });
+
+    if (!appointments || appointments.length === 0) {
+      log.info('No appointments found for lead:', { leadId });
+      return { all_appointments: '', appointments_list: [], appointments_count: 0 };
     }
 
     // Format appointments for display
@@ -299,7 +313,7 @@ async function getAllAppointmentsForLead(leadId) {
     };
   } catch (error) {
     log.error('Error fetching appointments for lead:', error);
-    return { all_appointments: '', appointments_list: [] };
+    return { all_appointments: '', appointments_list: [], appointments_count: 0 };
   }
 }
 
@@ -519,10 +533,20 @@ r.post('/retell/webhook', async (req, res) => {
                 // Check for existing active chat for this phone number
                 const { data: existingChat } = await supa
                   .from('whatsapp_chats')
-                  .select('id')
+                  .select('id, retell_chat_id')
                   .eq('wa_phone', normalizedPhone)
                   .in('status', ['open', 'pending_response'])
-                  .single();
+                  .maybeSingle();
+
+                const agentVariablesForWelcome = {
+                  ...(lead.agent_variables || {}),
+                  name: String(lead.name || 'Cliente'),
+                  client_name: lead.name || 'Cliente',
+                  business_name: ownerData?.name || 'Clínica',
+                  agent_name: chatAgent.agent_name || 'Assistente',
+                  all_appointments: appointmentsDataForWelcome.all_appointments,
+                  appointments_count: appointmentsDataForWelcome.appointments_count || 0
+                };
 
                 let newChat;
                 if (existingChat) {
@@ -531,15 +555,7 @@ r.post('/retell/webhook', async (req, res) => {
                     .from('whatsapp_chats')
                     .update({
                       lead_id: lead.id,
-                      agent_variables: {
-                        ...(lead.agent_variables || {}),
-                        name: String(lead.name || 'Cliente'),
-                        client_name: lead.name || 'Cliente',
-                        business_name: ownerData?.name || 'Clínica',
-                        agent_name: chatAgent.agent_name || 'Assistente',
-                        all_appointments: appointmentsDataForWelcome.all_appointments,
-                        appointments_count: appointmentsDataForWelcome.appointments_count || 0
-                      },
+                      agent_variables: agentVariablesForWelcome,
                       agent_id: chatAgent.id,
                       status: 'pending_response',
                       metadata: chatMetadata,
@@ -551,6 +567,35 @@ r.post('/retell/webhook', async (req, res) => {
 
                   if (!updateError && updatedChat) {
                     newChat = updatedChat;
+
+                    // Update Retell chat if it exists and is ongoing
+                    if (existingChat.retell_chat_id) {
+                      try {
+                        const retellChatInfo = await retellGetChat(existingChat.retell_chat_id);
+                        
+                        if (retellChatInfo.chat_status === 'ongoing') {
+                          // Convert agent_variables to string format for Retell
+                          const retellDynamicVariables = {};
+                          Object.keys(agentVariablesForWelcome).forEach(key => {
+                            if (agentVariablesForWelcome[key] !== null && agentVariablesForWelcome[key] !== undefined) {
+                              retellDynamicVariables[key] = String(agentVariablesForWelcome[key]);
+                            }
+                          });
+
+                          await retellUpdateChat(existingChat.retell_chat_id, {
+                            override_dynamic_variables: retellDynamicVariables
+                          });
+
+                          log.info('Updated existing Retell chat with welcome message variables:', {
+                            retellChatId: existingChat.retell_chat_id,
+                            leadId: lead.id
+                          });
+                        }
+                      } catch (retellError) {
+                        log.warn('Failed to update Retell chat for welcome message:', retellError.message);
+                        // Don't fail if Retell update fails
+                      }
+                    }
                   }
                 } else {
                   // Insert new chat record
@@ -813,13 +858,20 @@ r.post('/retell/webhook', async (req, res) => {
 
           // Get all appointments for this lead AFTER creating the new appointment
           // This ensures the newly created appointment is included in the count
+          // Add a small delay to ensure database consistency (Supabase may need a moment)
+          if (appointmentId) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          
           const appointmentsData = await getAllAppointmentsForLead(lead.id);
           
           log.info('Fetched appointments after creation:', {
             leadId: lead.id,
             appointmentId,
+            appointmentError: appointmentError?.message || null,
             appointmentsCount: appointmentsData.appointments_count,
-            allAppointments: appointmentsData.all_appointments
+            allAppointments: appointmentsData.all_appointments,
+            appointmentsListLength: appointmentsData.appointments_list?.length || 0
           });
 
           let googleEventId = null;
@@ -2211,7 +2263,7 @@ r.post('/retell/chat-book-appointment', async (req, res) => {
       // Find active chat for this lead
       const { data: activeChat } = await supa
         .from('whatsapp_chats')
-        .select('id, agent_variables')
+        .select('id, agent_variables, retell_chat_id')
         .eq('lead_id', lead.id)
         .in('status', ['open', 'pending_response'])
         .order('updated_at', { ascending: false })
@@ -2219,17 +2271,49 @@ r.post('/retell/chat-book-appointment', async (req, res) => {
         .maybeSingle();
 
       if (activeChat) {
+        const updatedAgentVariables = {
+          ...(activeChat.agent_variables || {}),
+          all_appointments: appointmentsData.all_appointments,
+          appointments_count: appointmentsData.appointments_count || 0
+        };
+
+        // Update database
         await supa
           .from('whatsapp_chats')
           .update({
-            agent_variables: {
-              ...(activeChat.agent_variables || {}),
-              all_appointments: appointmentsData.all_appointments,
-              appointments_count: appointmentsData.appointments_count || 0
-            },
+            agent_variables: updatedAgentVariables,
             updated_at: new Date().toISOString()
           })
           .eq('id', activeChat.id);
+
+        // Update Retell chat if it exists and is ongoing
+        if (activeChat.retell_chat_id) {
+          try {
+            const retellChatInfo = await retellGetChat(activeChat.retell_chat_id);
+            
+            if (retellChatInfo.chat_status === 'ongoing') {
+              // Convert agent_variables to string format for Retell
+              const retellDynamicVariables = {};
+              Object.keys(updatedAgentVariables).forEach(key => {
+                if (updatedAgentVariables[key] !== null && updatedAgentVariables[key] !== undefined) {
+                  retellDynamicVariables[key] = String(updatedAgentVariables[key]);
+                }
+              });
+
+              await retellUpdateChat(activeChat.retell_chat_id, {
+                override_dynamic_variables: retellDynamicVariables
+              });
+
+              log.info('[chat-book-appointment] Updated Retell chat with new appointments:', {
+                retellChatId: activeChat.retell_chat_id,
+                appointmentsCount: appointmentsData.appointments_count
+              });
+            }
+          } catch (retellError) {
+            log.warn('[chat-book-appointment] Failed to update Retell chat:', retellError.message);
+            // Don't fail if Retell update fails
+          }
+        }
 
         log.info('[chat-book-appointment] Updated agent_variables in active chat:', {
           chatId: activeChat.id,
@@ -2444,7 +2528,7 @@ r.post('/retell/chat-reschedule-appointment', async (req, res) => {
       // Find active chat for this lead
       const { data: activeChat } = await supa
         .from('whatsapp_chats')
-        .select('id, agent_variables')
+        .select('id, agent_variables, retell_chat_id')
         .eq('lead_id', appointment.lead_id)
         .in('status', ['open', 'pending_response'])
         .order('updated_at', { ascending: false })
@@ -2452,17 +2536,49 @@ r.post('/retell/chat-reschedule-appointment', async (req, res) => {
         .maybeSingle();
 
       if (activeChat) {
+        const updatedAgentVariables = {
+          ...(activeChat.agent_variables || {}),
+          all_appointments: appointmentsData.all_appointments,
+          appointments_count: appointmentsData.appointments_count || 0
+        };
+
+        // Update database
         await supa
           .from('whatsapp_chats')
           .update({
-            agent_variables: {
-              ...(activeChat.agent_variables || {}),
-              all_appointments: appointmentsData.all_appointments,
-              appointments_count: appointmentsData.appointments_count || 0
-            },
+            agent_variables: updatedAgentVariables,
             updated_at: new Date().toISOString()
           })
           .eq('id', activeChat.id);
+
+        // Update Retell chat if it exists and is ongoing
+        if (activeChat.retell_chat_id) {
+          try {
+            const retellChatInfo = await retellGetChat(activeChat.retell_chat_id);
+            
+            if (retellChatInfo.chat_status === 'ongoing') {
+              // Convert agent_variables to string format for Retell
+              const retellDynamicVariables = {};
+              Object.keys(updatedAgentVariables).forEach(key => {
+                if (updatedAgentVariables[key] !== null && updatedAgentVariables[key] !== undefined) {
+                  retellDynamicVariables[key] = String(updatedAgentVariables[key]);
+                }
+              });
+
+              await retellUpdateChat(activeChat.retell_chat_id, {
+                override_dynamic_variables: retellDynamicVariables
+              });
+
+              log.info('[chat-reschedule-appointment] Updated Retell chat with updated appointments:', {
+                retellChatId: activeChat.retell_chat_id,
+                appointmentsCount: appointmentsData.appointments_count
+              });
+            }
+          } catch (retellError) {
+            log.warn('[chat-reschedule-appointment] Failed to update Retell chat:', retellError.message);
+            // Don't fail if Retell update fails
+          }
+        }
 
         log.info('[chat-reschedule-appointment] Updated agent_variables in active chat:', {
           chatId: activeChat.id,
@@ -2568,7 +2684,7 @@ r.post('/retell/chat-cancel-appointment', async (req, res) => {
       // Find active chat for this lead
       const { data: activeChat } = await supa
         .from('whatsapp_chats')
-        .select('id, agent_variables')
+        .select('id, agent_variables, retell_chat_id')
         .eq('lead_id', appointment.lead_id)
         .in('status', ['open', 'pending_response'])
         .order('updated_at', { ascending: false })
@@ -2576,17 +2692,49 @@ r.post('/retell/chat-cancel-appointment', async (req, res) => {
         .maybeSingle();
 
       if (activeChat) {
+        const updatedAgentVariables = {
+          ...(activeChat.agent_variables || {}),
+          all_appointments: appointmentsData.all_appointments,
+          appointments_count: appointmentsData.appointments_count || 0
+        };
+
+        // Update database
         await supa
           .from('whatsapp_chats')
           .update({
-            agent_variables: {
-              ...(activeChat.agent_variables || {}),
-              all_appointments: appointmentsData.all_appointments,
-              appointments_count: appointmentsData.appointments_count || 0
-            },
+            agent_variables: updatedAgentVariables,
             updated_at: new Date().toISOString()
           })
           .eq('id', activeChat.id);
+
+        // Update Retell chat if it exists and is ongoing
+        if (activeChat.retell_chat_id) {
+          try {
+            const retellChatInfo = await retellGetChat(activeChat.retell_chat_id);
+            
+            if (retellChatInfo.chat_status === 'ongoing') {
+              // Convert agent_variables to string format for Retell
+              const retellDynamicVariables = {};
+              Object.keys(updatedAgentVariables).forEach(key => {
+                if (updatedAgentVariables[key] !== null && updatedAgentVariables[key] !== undefined) {
+                  retellDynamicVariables[key] = String(updatedAgentVariables[key]);
+                }
+              });
+
+              await retellUpdateChat(activeChat.retell_chat_id, {
+                override_dynamic_variables: retellDynamicVariables
+              });
+
+              log.info('[chat-cancel-appointment] Updated Retell chat with cancelled appointment:', {
+                retellChatId: activeChat.retell_chat_id,
+                appointmentsCount: appointmentsData.appointments_count
+              });
+            }
+          } catch (retellError) {
+            log.warn('[chat-cancel-appointment] Failed to update Retell chat:', retellError.message);
+            // Don't fail if Retell update fails
+          }
+        }
 
         log.info('[chat-cancel-appointment] Updated agent_variables in active chat:', {
           chatId: activeChat.id,

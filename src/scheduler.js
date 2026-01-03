@@ -5,7 +5,7 @@ import { log } from './config/logger.js';
 import { twilio } from './lib/twilio.js';
 import { getNowInSaoPaulo, isWithinBusinessHours, getIsoStringNow, getDateStringInTimezone, getDayOfWeekInTimezone, normalizeDateString, toIsoStringSaoPaulo } from './utils/timezone.js';
 import { whatsappBusinessService } from './services/whatsappBusiness.js';
-import { normalizePhoneNumber } from './lib/retell.js';
+import { normalizePhoneNumber, retellUpdateChat, retellGetChat } from './lib/retell.js';
 
 
 async function canRetryNow(leadId, minGapHours = 2) {
@@ -46,7 +46,7 @@ async function isLeadAlreadyBeingProcessed(leadId) {
  */
 async function getAllAppointmentsForLead(leadId) {
   try {
-    if (!leadId) return { all_appointments: '', appointments_list: [] };
+    if (!leadId) return { all_appointments: '', appointments_list: [], appointments_count: 0 };
 
     const { data: appointments, error } = await supa
       .from('appointments')
@@ -65,7 +65,7 @@ async function getAllAppointmentsForLead(leadId) {
       .order('start_at', { ascending: true });
 
     if (error || !appointments || appointments.length === 0) {
-      return { all_appointments: '', appointments_list: [] };
+      return { all_appointments: '', appointments_list: [], appointments_count: 0 };
     }
 
     // Format appointments for display
@@ -115,7 +115,7 @@ async function getAllAppointmentsForLead(leadId) {
     };
   } catch (error) {
     log.error('Error fetching appointments for lead:', error);
-    return { all_appointments: '', appointments_list: [] };
+    return { all_appointments: '', appointments_list: [], appointments_count: 0 };
   }
 }
 
@@ -555,6 +555,9 @@ cron.schedule('5 * * * *', async () => {
           ]
         );
         
+        // Get all appointments for this lead
+        const appointmentsDataForWelcome = await getAllAppointmentsForLead(lead.id);
+        
         // Create whatsapp_chats record
         const chatMetadata = {
           chat_type: 'welcome',
@@ -563,28 +566,96 @@ cron.schedule('5 * * * *', async () => {
           resource_id: lead.assigned_resource_id
         };
         
-        const { data: newChat, error: chatError } = await supa
+        // Check for existing active chat for this phone number
+        const { data: existingChat } = await supa
           .from('whatsapp_chats')
-          .insert({
-            owner_id: ownerId,
-            lead_id: lead.id,
-            wa_phone: normalizedPhone,
-            agent_id: chatAgent.id,
-            status: 'pending_response',
-            metadata: chatMetadata,
-            agent_variables: {
-              ...(lead.agent_variables || {}),
-              name: firstName,
-              client_name: lead.name,
-              business_name: ownerData?.name || 'Clínica',
-              agent_name: chatAgent.agent_name || 'Assistente'
-            },
-            last_message_at: new Date().toISOString()
-          })
-          .select()
-          .single();
+          .select('id, retell_chat_id')
+          .eq('wa_phone', normalizedPhone)
+          .in('status', ['open', 'pending_response'])
+          .maybeSingle();
+
+        const agentVariablesForWelcome = {
+          ...(lead.agent_variables || {}),
+          name: firstName,
+          client_name: lead.name,
+          business_name: ownerData?.name || 'Clínica',
+          agent_name: chatAgent.agent_name || 'Assistente',
+          all_appointments: appointmentsDataForWelcome.all_appointments,
+          appointments_count: appointmentsDataForWelcome.appointments_count || 0
+        };
+
+        let newChat;
+        if (existingChat) {
+          // Update existing active chat
+          const { data: updatedChat, error: updateError } = await supa
+            .from('whatsapp_chats')
+            .update({
+              lead_id: lead.id,
+              agent_id: chatAgent.id,
+              status: 'pending_response',
+              metadata: chatMetadata,
+              agent_variables: agentVariablesForWelcome,
+              last_message_at: new Date().toISOString()
+            })
+            .eq('id', existingChat.id)
+            .select()
+            .single();
+
+          if (!updateError && updatedChat) {
+            newChat = updatedChat;
+
+            // Update Retell chat if it exists and is ongoing
+            if (existingChat.retell_chat_id) {
+              try {
+                const retellChatInfo = await retellGetChat(existingChat.retell_chat_id);
+                
+                if (retellChatInfo.chat_status === 'ongoing') {
+                  // Convert agent_variables to string format for Retell
+                  const retellDynamicVariables = {};
+                  Object.keys(agentVariablesForWelcome).forEach(key => {
+                    if (agentVariablesForWelcome[key] !== null && agentVariablesForWelcome[key] !== undefined) {
+                      retellDynamicVariables[key] = String(agentVariablesForWelcome[key]);
+                    }
+                  });
+
+                  await retellUpdateChat(existingChat.retell_chat_id, {
+                    override_dynamic_variables: retellDynamicVariables
+                  });
+
+                  log.info('Updated existing Retell chat with welcome message variables:', {
+                    retellChatId: existingChat.retell_chat_id,
+                    leadId: lead.id
+                  });
+                }
+              } catch (retellError) {
+                log.warn('Failed to update Retell chat for welcome message:', retellError.message);
+                // Don't fail if Retell update fails
+              }
+            }
+          }
+        } else {
+          // Insert new chat record
+          const { data: insertedChat, error: chatError } = await supa
+            .from('whatsapp_chats')
+            .insert({
+              owner_id: ownerId,
+              lead_id: lead.id,
+              wa_phone: normalizedPhone,
+              agent_id: chatAgent.id,
+              status: 'pending_response',
+              metadata: chatMetadata,
+              agent_variables: agentVariablesForWelcome,
+              last_message_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+          
+          if (!chatError && insertedChat) {
+            newChat = insertedChat;
+          }
+        }
         
-        if (!chatError && newChat) {
+        if (newChat) {
           await supa
             .from('whatsapp_messages')
             .insert({
@@ -799,10 +870,31 @@ cron.schedule('5 * * * *', async () => {
         // Check for existing active chat for this phone number
         const { data: existingChat } = await supa
           .from('whatsapp_chats')
-          .select('id')
+          .select('id, retell_chat_id')
           .eq('wa_phone', normalizedPhone)
           .in('status', ['open', 'pending_response'])
-          .single();
+          .maybeSingle();
+
+        const agentVariablesForAvailableTime = {
+          ...agentVariables,
+          name: firstName,
+          client_name: lead.name,
+          resource_name: resourceName,
+          resource_type: resourceType,
+          business_name: ownerData?.name || 'Clínica',
+          agent_name: chatAgent.agent_name || 'Assistente',
+          suggested_date: formattedSuggestedDate,
+          available_slots: availableSlotsText,
+          slot_1: earlierSlots[0]?.formatted || '',
+          slot_1_date: earlierSlots[0]?.date || '',
+          slot_1_time: earlierSlots[0]?.time || '',
+          slot_2: earlierSlots[1]?.formatted || '',
+          slot_2_date: earlierSlots[1]?.date || '',
+          slot_2_time: earlierSlots[1]?.time || '',
+          // Include all appointments for rescheduling context
+          all_appointments: appointmentsData.all_appointments,
+          appointments_count: appointmentsData.appointments_count || 0
+        };
 
         let newChat;
         if (existingChat) {
@@ -814,26 +906,7 @@ cron.schedule('5 * * * *', async () => {
               agent_id: chatAgent.id,
               status: 'pending_response',
               metadata: chatMetadata,
-              agent_variables: {
-                ...agentVariables,
-                name: firstName,
-                client_name: lead.name,
-                resource_name: resourceName,
-                resource_type: resourceType,
-                business_name: ownerData?.name || 'Clínica',
-                agent_name: chatAgent.agent_name || 'Assistente',
-                suggested_date: formattedSuggestedDate,
-                available_slots: availableSlotsText,
-                slot_1: earlierSlots[0]?.formatted || '',
-                slot_1_date: earlierSlots[0]?.date || '',
-                slot_1_time: earlierSlots[0]?.time || '',
-                slot_2: earlierSlots[1]?.formatted || '',
-                slot_2_date: earlierSlots[1]?.date || '',
-                slot_2_time: earlierSlots[1]?.time || '',
-                // Include all appointments for rescheduling context
-                all_appointments: appointmentsData.all_appointments,
-                appointments_count: appointmentsData.appointments_count || 0
-              },
+              agent_variables: agentVariablesForAvailableTime,
               last_message_at: new Date().toISOString()
             })
             .eq('id', existingChat.id)
@@ -844,6 +917,35 @@ cron.schedule('5 * * * *', async () => {
             log.error('Error updating whatsapp_chats record:', updateError);
           } else {
             newChat = updatedChat;
+
+            // Update Retell chat if it exists and is ongoing
+            if (existingChat.retell_chat_id) {
+              try {
+                const retellChatInfo = await retellGetChat(existingChat.retell_chat_id);
+                
+                if (retellChatInfo.chat_status === 'ongoing') {
+                  // Convert agent_variables to string format for Retell
+                  const retellDynamicVariables = {};
+                  Object.keys(agentVariablesForAvailableTime).forEach(key => {
+                    if (agentVariablesForAvailableTime[key] !== null && agentVariablesForAvailableTime[key] !== undefined) {
+                      retellDynamicVariables[key] = String(agentVariablesForAvailableTime[key]);
+                    }
+                  });
+
+                  await retellUpdateChat(existingChat.retell_chat_id, {
+                    override_dynamic_variables: retellDynamicVariables
+                  });
+
+                  log.info('Updated existing Retell chat with available time variables:', {
+                    retellChatId: existingChat.retell_chat_id,
+                    leadId: lead.id
+                  });
+                }
+              } catch (retellError) {
+                log.warn('Failed to update Retell chat for available time:', retellError.message);
+                // Don't fail if Retell update fails
+              }
+            }
           }
         } else {
           // Insert new chat record
@@ -856,26 +958,7 @@ cron.schedule('5 * * * *', async () => {
             agent_id: chatAgent.id,
             status: 'pending_response', // Waiting for user to reply
             metadata: chatMetadata,
-            agent_variables: {
-              ...agentVariables,
-              name: firstName,
-              client_name: lead.name,
-              resource_name: resourceName,
-              resource_type: resourceType,
-              business_name: ownerData?.name || 'Clínica',
-              agent_name: chatAgent.agent_name || 'Assistente',
-              suggested_date: formattedSuggestedDate,
-              available_slots: availableSlotsText,
-              slot_1: earlierSlots[0]?.formatted || '',
-              slot_1_date: earlierSlots[0]?.date || '',
-              slot_1_time: earlierSlots[0]?.time || '',
-              slot_2: earlierSlots[1]?.formatted || '',
-              slot_2_date: earlierSlots[1]?.date || '',
-              slot_2_time: earlierSlots[1]?.time || '',
-              // Include all appointments for rescheduling context
-              all_appointments: appointmentsData.all_appointments,
-              appointments_count: appointmentsData.appointments_count || 0
-            },
+            agent_variables: agentVariablesForAvailableTime,
             last_message_at: new Date().toISOString()
           })
           .select()

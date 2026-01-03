@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { verifyJWT } from '../middleware/verifyJWT.js';
 import { whatsappBusinessService } from '../services/whatsappBusiness.js';
-import { normalizePhoneNumber, retellCreateChat, retellSendChatMessage } from '../lib/retell.js';
+import { normalizePhoneNumber, retellCreateChat, retellSendChatMessage, retellUpdateChat, retellGetChat } from '../lib/retell.js';
 import { supa } from '../lib/supabase.js';
 import { log } from '../config/logger.js';
 import { env } from '../config/env.js';
@@ -1317,6 +1317,13 @@ router.post('/webhook', async (req, res) => {
                                 // Get all appointments for this lead
                                 const appointmentsDataForUpdate = lead?.id ? await getAllAppointmentsForLead(lead.id) : { all_appointments: '', appointments_count: 0 };
 
+                                const updatedAgentVariables = {
+                                  ...(existingChat.agent_variables || {}),
+                                  ...chatVariables,
+                                  all_appointments: appointmentsDataForUpdate.all_appointments,
+                                  appointments_count: appointmentsDataForUpdate.appointments_count || 0
+                                };
+
                                 await supa
                                   .from('whatsapp_chats')
                                   .update({ 
@@ -1325,12 +1332,7 @@ router.post('/webhook', async (req, res) => {
                                     agent_id: chatAgent.retell_agent_id,
                                     last_message_at: new Date().toISOString(),
                                     updated_at: new Date().toISOString(),
-                                    agent_variables: {
-                                      ...(existingChat.agent_variables || {}),
-                                      ...chatVariables,
-                                      all_appointments: appointmentsDataForUpdate.all_appointments,
-                                      appointments_count: appointmentsDataForUpdate.appointments_count || 0
-                                    },
+                                    agent_variables: updatedAgentVariables,
                                     metadata: {
                                       ...existingChat.metadata,
                                       chat_type: 'followup',
@@ -1338,6 +1340,34 @@ router.post('/webhook', async (req, res) => {
                                     }
                                   })
                                   .eq('id', existingChat.id);
+
+                                // Update the newly created Retell chat with the final agent_variables
+                                // (in case appointmentsDataForUpdate differs from appointmentsData)
+                                try {
+                                  const retellChatInfo = await retellGetChat(retellChat.chat_id);
+                                  
+                                  if (retellChatInfo.chat_status === 'ongoing') {
+                                    // Convert agent_variables to string format for Retell
+                                    const retellDynamicVariables = {};
+                                    Object.keys(updatedAgentVariables).forEach(key => {
+                                      if (updatedAgentVariables[key] !== null && updatedAgentVariables[key] !== undefined) {
+                                        retellDynamicVariables[key] = String(updatedAgentVariables[key]);
+                                      }
+                                    });
+
+                                    await retellUpdateChat(retellChat.chat_id, {
+                                      override_dynamic_variables: retellDynamicVariables
+                                    });
+
+                                    log.info('Updated Retell chat with followup variables:', {
+                                      retellChatId: retellChat.chat_id,
+                                      leadId: lead?.id
+                                    });
+                                  }
+                                } catch (retellError) {
+                                  log.warn('Failed to update Retell chat for followup:', retellError.message);
+                                  // Don't fail if Retell update fails
+                                }
 
                                 chat = { ...existingChat, retell_chat_id: retellChat.chat_id, status: 'open' };
                                 log.info('Created new Retell session for ended chat:', { chatId: existingChat.id, newRetellChatId: retellChat.chat_id });
@@ -1577,10 +1607,21 @@ router.post('/webhook', async (req, res) => {
                           // Check for existing active chat for this phone number
                           const { data: existingChat } = await supa
                             .from('whatsapp_chats')
-                            .select('id')
+                            .select('id, retell_chat_id')
                             .eq('wa_phone', waPhone)
                             .in('status', ['open', 'pending_response'])
-                            .single();
+                            .maybeSingle();
+
+                          const agentVariablesForNewChat = {
+                            ...(lead?.agent_variables || {}),
+                            name: String(lead?.name || 'Cliente'),
+                            client_name: lead?.name || 'Cliente',
+                            business_name: ownerData?.name || '',
+                            location: ownerData?.location || '',
+                            agent_name: chatAgent.agent_name || 'Assistente',
+                            all_appointments: appointmentsDataForNewChat.all_appointments,
+                            appointments_count: appointmentsDataForNewChat.appointments_count || 0
+                          };
 
                           let newChat;
                           if (existingChat) {
@@ -1596,16 +1637,7 @@ router.post('/webhook', async (req, res) => {
                                   chat_type: determinedChatType,
                                   service_type: serviceType
                                 },
-                                agent_variables: {
-                                  ...(lead?.agent_variables || {}),
-                                  name: String(lead?.name || 'Cliente'),
-                                  client_name: lead?.name || 'Cliente',
-                                  business_name: ownerData?.name || '',
-                                  location: ownerData?.location || '',
-                                  agent_name: chatAgent.agent_name || 'Assistente',
-                                  all_appointments: appointmentsDataForNewChat.all_appointments,
-                                  appointments_count: appointmentsDataForNewChat.appointments_count || 0
-                                },
+                                agent_variables: agentVariablesForNewChat,
                                 last_message_at: new Date().toISOString()
                               })
                               .eq('id', existingChat.id)
@@ -1622,6 +1654,37 @@ router.post('/webhook', async (req, res) => {
                               return;
                             }
                             newChat = updatedChat;
+
+                            // Update Retell chat if it exists and is ongoing
+                            // Check if we should update the newly created chat or an existing one
+                            const chatIdToUpdate = retellChatId || existingChat.retell_chat_id;
+                            if (chatIdToUpdate) {
+                              try {
+                                const retellChatInfo = await retellGetChat(chatIdToUpdate);
+                                
+                                if (retellChatInfo.chat_status === 'ongoing') {
+                                  // Convert agent_variables to string format for Retell
+                                  const retellDynamicVariables = {};
+                                  Object.keys(agentVariablesForNewChat).forEach(key => {
+                                    if (agentVariablesForNewChat[key] !== null && agentVariablesForNewChat[key] !== undefined) {
+                                      retellDynamicVariables[key] = String(agentVariablesForNewChat[key]);
+                                    }
+                                  });
+
+                                  await retellUpdateChat(chatIdToUpdate, {
+                                    override_dynamic_variables: retellDynamicVariables
+                                  });
+
+                                  log.info('Updated Retell chat with new message variables:', {
+                                    retellChatId: chatIdToUpdate,
+                                    leadId: chatLeadId
+                                  });
+                                }
+                              } catch (retellError) {
+                                log.warn('Failed to update Retell chat for new message:', retellError.message);
+                                // Don't fail if Retell update fails
+                              }
+                            }
                           } else {
                             // Insert new chat record
                             const { data: insertedChat, error: insertError } = await supa
@@ -1637,16 +1700,7 @@ router.post('/webhook', async (req, res) => {
                                 chat_type: determinedChatType,
                                 service_type: serviceType
                               },
-                              agent_variables: {
-                                ...(lead?.agent_variables || {}),
-                                name: String(lead?.name || 'Cliente'),
-                                client_name: lead?.name || 'Cliente',
-                                business_name: ownerData?.name || '',
-                                location: ownerData?.location || '',
-                                agent_name: chatAgent.agent_name || 'Assistente',
-                                all_appointments: appointmentsDataForNewChat.all_appointments,
-                                appointments_count: appointmentsDataForNewChat.appointments_count || 0
-                              },
+                              agent_variables: agentVariablesForNewChat,
                               last_message_at: new Date().toISOString()
                             })
                             .select()
