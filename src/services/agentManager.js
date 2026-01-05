@@ -385,8 +385,10 @@ class AgentManager {
   /**
    * Find the best resource (doctor/treatment) and agent for a lead based on owner's selection and service type
    */
-  async findDoctorAndAgentForLead(lead) {
+  async findDoctorAndAgentForLead(lead, options = {}) {
     try {
+      const { testMode = false } = options;
+      
       // Get owner's service type
       const { data: owner, error: ownerError } = await supa
         .from('users')
@@ -444,6 +446,8 @@ class AgentManager {
       // Get owner's selected agent (use default or find suitable agent)
       let selectedAgent = {};
 
+      // In test mode, we can use inactive agents
+      // First, try to get the default agent (even if inactive in test mode)
       const { data: ownerData, error: ownerDataError } = await supa
           .from('users')
           .select(`
@@ -453,15 +457,28 @@ class AgentManager {
           .eq('id', lead.owner_id)
           .single();
 
-        if (!ownerDataError && ownerData?.agents?.is_active) {
-          selectedAgent = ownerData.agents;
-        } else {
-          // Find any active agent for this owner
-          const { data: ownerAgents, error: agentError } = await supa
+        if (!ownerDataError && ownerData?.agents) {
+          // In test mode, accept inactive agents; otherwise only active
+          if (testMode || ownerData.agents.is_active) {
+            selectedAgent = ownerData.agents;
+          }
+        }
+        
+        // If no agent found yet, search for agents
+        if (!selectedAgent.id) {
+          let agentQuery = supa
             .from('agents')
             .select('*')
             .eq('owner_id', lead.owner_id)
-            .eq('is_active', true)
+            .eq('channel', 'voice');
+          
+          // In test mode, don't filter by is_active; otherwise only get active agents
+          if (!testMode) {
+            agentQuery = agentQuery.eq('is_active', true);
+          }
+          
+          const { data: ownerAgents, error: agentError } = await agentQuery
+            .order('created_at', { ascending: false })
             .limit(1);
 
           if (!agentError && ownerAgents?.length > 0) {
@@ -469,7 +486,7 @@ class AgentManager {
           }
         }
 
-      log.info(`Selected agent for lead: ${selectedAgent.agent_name} (${selectedAgent.id})`);
+      log.info(`Selected agent for lead: ${selectedAgent.agent_name} (${selectedAgent.id}) - Test mode: ${testMode}`);
 
       return {
         doctor: selectedResource, // Keep property name for backward compatibility, but now it's a generic resource

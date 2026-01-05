@@ -98,6 +98,7 @@ router.post('/lead/submit', verifyApiToken, async (req, res) => {
         notes,
         custom_fields,
         status: 'new',
+        test_mode: test_mode || false,
       })
       .select()
       .single();
@@ -116,7 +117,8 @@ router.post('/lead/submit', verifyApiToken, async (req, res) => {
       let assignment;
       
       // Find appropriate doctor and agent based on owner_id
-      assignment = await agentManager.findDoctorAndAgentForLead(newLead);
+      // Pass test_mode to allow inactive agents for testing
+      assignment = await agentManager.findDoctorAndAgentForLead(newLead, { testMode: test_mode });
       
       // Assign doctor and agent to lead
       const updatedLead = await agentManager.assignDoctorAndAgentToLead(
