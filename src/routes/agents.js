@@ -537,6 +537,169 @@ router.get('/get/stats', verifyJWT, async (req, res) => {
   }
 });
 
+// Get real-time status for a specific agent (voice or chat)
+router.get('/:id/status', verifyJWT, async (req, res) => {
+  try {
+    const agentId = req.params.id;
+    const userId = req.user.id;
+
+    // Get agent info
+    const { data: agent, error: agentError } = await supa
+      .from('agents')
+      .select('id, agent_name, is_active, owner_id, channel')
+      .eq('id', agentId)
+      .eq('owner_id', userId)
+      .single();
+
+    if (agentError || !agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    const isChatAgent = agent.channel === 'chat';
+
+    if (isChatAgent) {
+      // Chat agent status
+      const { data: userData } = await supa
+        .from('users')
+        .select('whatsapp_connected')
+        .eq('id', userId)
+        .single();
+
+      const whatsappConnected = userData?.whatsapp_connected || false;
+
+      // Get today's date range (São Paulo timezone)
+      const { getStartOfDaySaoPaulo, getEndOfDaySaoPaulo } = await import('../utils/timezone.js');
+      const todayStart = getStartOfDaySaoPaulo();
+      const todayEnd = getEndOfDaySaoPaulo();
+
+      // Get chats today count
+      const { data: todayChats, error: chatsError } = await supa
+        .from('whatsapp_chats')
+        .select('id, created_at')
+        .eq('agent_id', agentId)
+        .gte('created_at', todayStart.toISOString())
+        .lt('created_at', todayEnd.toISOString());
+
+      const chatsToday = todayChats?.length || 0;
+
+      // Get last activity (most recent chat)
+      const { data: lastChat, error: lastChatError } = await supa
+        .from('whatsapp_chats')
+        .select('last_message_at, updated_at, created_at')
+        .eq('agent_id', agentId)
+        .order('last_message_at', { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
+
+      let lastActivity = null;
+      if (lastChat?.last_message_at || lastChat?.updated_at || lastChat?.created_at) {
+        const lastActivityTime = new Date(lastChat.last_message_at || lastChat.updated_at || lastChat.created_at);
+        const now = new Date();
+        const diffMs = now - lastActivityTime;
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        if (diffMinutes < 60) {
+          lastActivity = `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`;
+        } else if (diffHours < 24) {
+          lastActivity = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+        } else {
+          lastActivity = `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+        }
+      }
+
+      // Determine status
+      let status = 'inactive';
+      if (agent.is_active && whatsappConnected) {
+        status = 'active';
+      } else if (!whatsappConnected) {
+        status = 'inactive';
+      } else {
+        status = 'paused';
+      }
+
+      res.json({
+        status,
+        whatsappConnected,
+        chatsToday,
+        lastActivity,
+        isActive: agent.is_active
+      });
+    } else {
+      // Voice agent status
+      const { data: userData } = await supa
+        .from('users')
+        .select('twilio_phone_number')
+        .eq('id', userId)
+        .single();
+
+      const phoneNumber = userData?.twilio_phone_number || null;
+
+      // Get today's date range (São Paulo timezone)
+      const { getStartOfDaySaoPaulo, getEndOfDaySaoPaulo } = await import('../utils/timezone.js');
+      const todayStart = getStartOfDaySaoPaulo();
+      const todayEnd = getEndOfDaySaoPaulo();
+
+      // Get calls today count
+      const { data: todayCalls, error: callsError } = await supa
+        .from('call_attempts')
+        .select('id, started_at')
+        .eq('agent_id', agentId)
+        .gte('started_at', todayStart.toISOString())
+        .lt('started_at', todayEnd.toISOString());
+
+      const callsToday = todayCalls?.length || 0;
+
+      // Get last activity (most recent call attempt)
+      const { data: lastCall, error: lastCallError } = await supa
+        .from('call_attempts')
+        .select('started_at, updated_at')
+        .eq('agent_id', agentId)
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      let lastActivity = null;
+      if (lastCall?.started_at || lastCall?.updated_at) {
+        const lastActivityTime = new Date(lastCall.started_at || lastCall.updated_at);
+        const now = new Date();
+        const diffMs = now - lastActivityTime;
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        if (diffMinutes < 60) {
+          lastActivity = `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`;
+        } else if (diffHours < 24) {
+          lastActivity = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+        } else {
+          lastActivity = `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+        }
+      }
+
+      // Determine status
+      let status = 'inactive';
+      if (agent.is_active) {
+        status = 'active';
+      } else {
+        status = 'paused';
+      }
+
+      res.json({
+        status,
+        phoneNumber,
+        callsToday,
+        lastActivity,
+        isActive: agent.is_active
+      });
+    }
+  } catch (error) {
+    log.error('Error fetching agent status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get all agents for the authenticated user
 // Get all agents for the user, optionally filtered by channel
 router.get('/', verifyJWT, async (req, res) => {
