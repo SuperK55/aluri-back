@@ -5,7 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon --watch src --ext js,json --exec node src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "pm2:start": "pm2 start ecosystem.config.cjs",
+    "pm2:stop": "pm2 stop geniumed-backend",
+    "pm2:restart": "pm2 restart geniumed-backend",
+    "pm2:delete": "pm2 delete geniumed-backend",
+    "pm2:logs": "pm2 logs geniumed-backend",
+    "pm2:monit": "pm2 monit",
+    "pm2:status": "pm2 status"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.46.1",

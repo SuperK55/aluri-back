@@ -6,18 +6,52 @@ import { supa } from '../lib/supabase.js';
 import { log } from '../config/logger.js';
 import { env } from '../config/env.js';
 import { agentManager } from '../services/agentManager.js';
+import { updateAgentVariablesForLead } from './retell.js';
 
 const router = Router();
 
 /**
- * Get all scheduled appointments for a lead and format them for agent context
- * @param {string} leadId - The lead ID
+ * Get all appointments for a phone number (aggregates across all leads with that phone)
+ * @param {string} phoneNumber - The phone number (can be with or without +)
  * @returns {Object} - Formatted appointments data for agent_variables
  */
-async function getAllAppointmentsForLead(leadId) {
+async function getAllAppointmentsForPhone(phoneNumber) {
   try {
-    if (!leadId) return { all_appointments: '', appointments_list: [] };
+    if (!phoneNumber) {
+      return { all_appointments: '', appointments_list: [], appointments_count: 0 };
+    }
 
+    // Normalize phone number (remove + and non-digits for comparison)
+    const normalizedPhone = phoneNumber.replace(/[^\d]/g, '');
+    
+    // Find all leads with this phone number
+    // Try multiple patterns to catch different phone formats
+    const phonePatterns = [
+      normalizedPhone,
+      `+${normalizedPhone}`,
+      `55${normalizedPhone}`,
+      `+55${normalizedPhone}`
+    ];
+    
+    // Build query to find leads matching any of these patterns
+    let leadsQuery = supa
+      .from('leads')
+      .select('id');
+    
+    // Use ilike for pattern matching (case-insensitive)
+    const conditions = phonePatterns.map(pattern => `phone.ilike.%${pattern}%`).join(',');
+    leadsQuery = leadsQuery.or(conditions);
+    
+    const { data: leads, error: leadsError } = await leadsQuery;
+
+    if (leadsError || !leads || leads.length === 0) {
+      log.debug('No leads found for phone number:', { phoneNumber, normalizedPhone });
+      return { all_appointments: '', appointments_list: [], appointments_count: 0 };
+    }
+
+    const leadIds = leads.map(lead => lead.id);
+
+    // Fetch all appointments for these leads
     const { data: appointments, error } = await supa
       .from('appointments')
       .select(`
@@ -26,16 +60,60 @@ async function getAllAppointmentsForLead(leadId) {
         end_at,
         resource_type,
         resource_id,
-        status,
-        doctors(id, name),
-        treatments(id, treatment_name)
+        status
       `)
-      .eq('lead_id', leadId)
+      .in('lead_id', leadIds)
       .eq('status', 'scheduled')
       .order('start_at', { ascending: true });
 
-    if (error || !appointments || appointments.length === 0) {
-      return { all_appointments: '', appointments_list: [] };
+    if (error) {
+      log.error('Error querying appointments by phone:', { error, phoneNumber, errorMessage: error.message });
+      return { all_appointments: '', appointments_list: [], appointments_count: 0 };
+    }
+
+    if (!appointments || appointments.length === 0) {
+      log.debug('No appointments found for phone number:', { phoneNumber, leadIds });
+      return { all_appointments: '', appointments_list: [], appointments_count: 0 };
+    }
+
+    // Collect resource IDs by type
+    const resourceIds = {
+      doctor: new Set(),
+      treatment: new Set()
+    };
+
+    appointments.forEach(apt => {
+      if (apt.resource_type === 'doctor' && apt.resource_id) {
+        resourceIds.doctor.add(apt.resource_id);
+      } else if (apt.resource_type === 'treatment' && apt.resource_id) {
+        resourceIds.treatment.add(apt.resource_id);
+      }
+    });
+
+    // Fetch all doctors
+    const doctorsMap = new Map();
+    if (resourceIds.doctor.size > 0) {
+      const { data: doctors } = await supa
+        .from('doctors')
+        .select('id, name')
+        .in('id', Array.from(resourceIds.doctor));
+
+      doctors?.forEach(doctor => {
+        doctorsMap.set(doctor.id, doctor);
+      });
+    }
+
+    // Fetch all treatments
+    const treatmentsMap = new Map();
+    if (resourceIds.treatment.size > 0) {
+      const { data: treatments } = await supa
+        .from('treatments')
+        .select('id, treatment_name')
+        .in('id', Array.from(resourceIds.treatment));
+
+      treatments?.forEach(treatment => {
+        treatmentsMap.set(treatment.id, treatment);
+      });
     }
 
     // Format appointments for display
@@ -53,12 +131,14 @@ async function getAllAppointmentsForLead(leadId) {
       const minutes = String(startDate.getMinutes()).padStart(2, '0');
       const timeStr = `${hours}:${minutes}`;
       
-      // Get resource name
+      // Get resource name from maps
       let resourceName = 'Consulta';
-      if (apt.resource_type === 'doctor' && apt.doctors) {
-        resourceName = apt.doctors.name || 'Médico';
-      } else if (apt.resource_type === 'treatment' && apt.treatments) {
-        resourceName = apt.treatments.treatment_name || 'Tratamento';
+      if (apt.resource_type === 'doctor' && apt.resource_id) {
+        const doctor = doctorsMap.get(apt.resource_id);
+        resourceName = doctor?.name || 'Médico';
+      } else if (apt.resource_type === 'treatment' && apt.resource_id) {
+        const treatment = treatmentsMap.get(apt.resource_id);
+        resourceName = treatment?.treatment_name || 'Tratamento';
       }
 
       return {
@@ -73,9 +153,9 @@ async function getAllAppointmentsForLead(leadId) {
       };
     });
 
-    // Create a readable text list for the agent
+    // Create a readable text list for the agent (include appointment ID for reference)
     const appointmentsText = formattedAppointments
-      .map((apt, index) => `${index + 1}. ${apt.formatted}`)
+      .map((apt, index) => `${index + 1}. [ID: ${apt.id}] ${apt.formatted}`)
       .join('\n');
 
     return {
@@ -84,8 +164,8 @@ async function getAllAppointmentsForLead(leadId) {
       appointments_count: formattedAppointments.length
     };
   } catch (error) {
-    log.error('Error fetching appointments for lead:', error);
-    return { all_appointments: '', appointments_list: [] };
+    log.error('Error fetching appointments for phone:', error);
+    return { all_appointments: '', appointments_list: [], appointments_count: 0 };
   }
 }
 
@@ -1083,6 +1163,12 @@ router.post('/webhook', async (req, res) => {
                             appointmentId,
                             phoneNumber
                           });
+
+                          // Update agent_variables in active whatsapp_chats and Retell chats
+                          if (appointment.lead_id) {
+                            updateAgentVariablesForLead(appointment.lead_id, 'whatsapp-button-confirm')
+                              .catch(err => log.warn('Failed to update agent_variables after button confirmation:', err.message));
+                          }
                           
                           // Send acknowledgment message
                           try {
@@ -1155,7 +1241,9 @@ router.post('/webhook', async (req, res) => {
                       });
 
                       try {
-                        const waPhone = phoneNumber.replace(/[^\d]/g, '');
+                        // Normalize phone number to match the format stored in database (E.164 with +)
+                        const waPhone = normalizePhoneNumber(phoneNumber);
+                        const waPhoneWithoutPlus = waPhone.replace(/^\+/, ''); // Also check without + for backward compatibility
                         
                         // #region agent log
                         fetch('http://localhost:7243/ingest/fa704248-e3dd-4b0a-ab9f-643803e5688c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'whatsapp.js:879',message:'Processing WhatsApp text message',data:{phoneNumber,waPhone,messageId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
@@ -1164,7 +1252,7 @@ router.post('/webhook', async (req, res) => {
                         const { data: existingOpenChat } = await supa
                           .from('whatsapp_chats')
                           .select('*')
-                          .eq('wa_phone', waPhone)
+                          .or(`wa_phone.eq.${waPhone},wa_phone.eq.${waPhoneWithoutPlus}`)
                           .in('status', ['open', 'pending_response'])
                           .order('created_at', { ascending: false })
                           .limit(1)
@@ -1173,7 +1261,7 @@ router.post('/webhook', async (req, res) => {
                         const { data: existingEndedChat } = await supa
                           .from('whatsapp_chats')
                           .select('*')
-                          .eq('wa_phone', waPhone)
+                          .or(`wa_phone.eq.${waPhone},wa_phone.eq.${waPhoneWithoutPlus}`)
                           .in('status', ['closed', 'ended', 'completed'])
                           .order('updated_at', { ascending: false })
                           .limit(1)
@@ -1280,8 +1368,9 @@ router.post('/webhook', async (req, res) => {
                                 log.info('Including previous chat history in followup conversation');
                               }
 
-                                // Get all appointments for this lead
-                                const appointmentsData = lead?.id ? await getAllAppointmentsForLead(lead.id) : { all_appointments: '', appointments_count: 0 };
+                                // Get all appointments for this phone number (aggregates across all leads with same phone)
+                                const patientPhone = lead?.whatsapp || lead?.phone || phoneNumber;
+                                const appointmentsData = patientPhone ? await getAllAppointmentsForPhone(patientPhone) : { all_appointments: '', appointments_count: 0 };
 
                                 const chatVariables = {
                                   ...(lead?.agent_variables || {}),
@@ -1314,8 +1403,9 @@ router.post('/webhook', async (req, res) => {
                                   }
                                 });
 
-                                // Get all appointments for this lead
-                                const appointmentsDataForUpdate = lead?.id ? await getAllAppointmentsForLead(lead.id) : { all_appointments: '', appointments_count: 0 };
+                                // Get all appointments for this phone number (aggregates across all leads with same phone)
+                                const patientPhoneForUpdate = lead?.whatsapp || lead?.phone || phoneNumber;
+                                const appointmentsDataForUpdate = patientPhoneForUpdate ? await getAllAppointmentsForPhone(patientPhoneForUpdate) : { all_appointments: '', appointments_count: 0 };
 
                                 const updatedAgentVariables = {
                                   ...(existingChat.agent_variables || {}),
@@ -1369,21 +1459,155 @@ router.post('/webhook', async (req, res) => {
                                   // Don't fail if Retell update fails
                                 }
 
-                                chat = { ...existingChat, retell_chat_id: retellChat.chat_id, status: 'open' };
+                                // Update chat object with new retell_chat_id and updated metadata
+                                chat = { 
+                                  ...existingChat, 
+                                  retell_chat_id: retellChat.chat_id, 
+                                  status: 'open',
+                                  metadata: {
+                                    ...existingChat.metadata,
+                                    chat_type: 'followup',
+                                    previous_retell_chat_id: existingChat.retell_chat_id
+                                  },
+                                  agent_variables: updatedAgentVariables
+                                };
                                 log.info('Created new Retell session for ended chat:', { chatId: existingChat.id, newRetellChatId: retellChat.chat_id });
                               } catch (retellError) {
                                 log.error('Failed to create new Retell session:', retellError.message);
                               }
                             }
                           } else {
-                            await supa
-                              .from('whatsapp_chats')
-                              .update({ 
-                                status: 'open',
-                                last_message_at: new Date().toISOString(),
-                                updated_at: new Date().toISOString()
-                              })
-                              .eq('id', existingChat.id);
+                            // Update existing open chat with latest appointments
+                            // Get all appointments for this phone number (aggregates across all leads with same phone)
+                            const patientPhoneForUpdate = lead?.whatsapp || lead?.phone || phoneNumber;
+                            const appointmentsDataForUpdate = patientPhoneForUpdate ? await getAllAppointmentsForPhone(patientPhoneForUpdate) : { all_appointments: '', appointments_count: 0 };
+                            
+                            // Update agent_variables with latest appointments
+                            const updatedAgentVariables = {
+                              ...(existingChat.agent_variables || {}),
+                              all_appointments: appointmentsDataForUpdate.all_appointments,
+                              appointments_count: appointmentsDataForUpdate.appointments_count || 0
+                            };
+                            
+                            // If chat doesn't have a retell_chat_id, create one
+                            if (!existingChat.retell_chat_id) {
+                              try {
+                                chatAgent = await agentManager.getChatAgentForOwner(ownerId, serviceType);
+                                
+                                if (chatAgent) {
+                                  const { data: ownerData } = await supa
+                                    .from('users')
+                                    .select('name, location')
+                                    .eq('id', ownerId)
+                                    .single();
+
+                                  // Get slot variables from chat metadata/agent_variables
+                                  let slotVariables = {};
+                                  if (existingChat.agent_variables) {
+                                    const chatVars = existingChat.agent_variables;
+                                    if (chatVars.slot_1) slotVariables.slot_1 = String(chatVars.slot_1);
+                                    if (chatVars.slot_1_date) slotVariables.slot_1_date = String(chatVars.slot_1_date);
+                                    if (chatVars.slot_1_time) slotVariables.slot_1_time = String(chatVars.slot_1_time);
+                                    if (chatVars.slot_2) slotVariables.slot_2 = String(chatVars.slot_2);
+                                    if (chatVars.slot_2_date) slotVariables.slot_2_date = String(chatVars.slot_2_date);
+                                    if (chatVars.slot_2_time) slotVariables.slot_2_time = String(chatVars.slot_2_time);
+                                    if (chatVars.available_slots) slotVariables.available_slots = String(chatVars.available_slots);
+                                    if (chatVars.suggested_date) slotVariables.suggested_date = String(chatVars.suggested_date);
+                                  }
+
+                                  // Determine chat_type from metadata
+                                  const chatType = existingChat.metadata?.chat_type || 'other';
+                                  
+                                  const chatVariables = {
+                                    ...(lead?.agent_variables || {}),
+                                    ...slotVariables,
+                                    ...updatedAgentVariables,
+                                    chat_type: chatType,
+                                    name: String(lead?.name || 'Cliente'),
+                                    lead_id: String(lead?.id || ''),
+                                    business_name: ownerData?.name || '',
+                                    location: ownerData?.location || ''
+                                  };
+
+                                  Object.keys(chatVariables).forEach(key => {
+                                    if (chatVariables[key] !== null && chatVariables[key] !== undefined) {
+                                      chatVariables[key] = String(chatVariables[key]);
+                                    }
+                                  });
+
+                                  const retellChat = await retellCreateChat({
+                                    agent_id: chatAgent.retell_agent_id,
+                                    retell_llm_dynamic_variables: chatVariables,
+                                    metadata: {
+                                      lead_id: lead?.id || null,
+                                      owner_id: ownerId,
+                                      chat_type: chatType,
+                                      wa_phone: waPhone
+                                    }
+                                  });
+
+                                  await supa
+                                    .from('whatsapp_chats')
+                                    .update({ 
+                                      retell_chat_id: retellChat.chat_id,
+                                      agent_id: chatAgent.retell_agent_id,
+                                      status: 'open',
+                                      last_message_at: new Date().toISOString(),
+                                      updated_at: new Date().toISOString(),
+                                      agent_variables: updatedAgentVariables
+                                    })
+                                    .eq('id', existingChat.id);
+
+                                  chat = { ...existingChat, retell_chat_id: retellChat.chat_id, status: 'open' };
+                                  log.info('Created Retell chat for existing chat without retell_chat_id:', { 
+                                    chatId: existingChat.id, 
+                                    retellChatId: retellChat.chat_id 
+                                  });
+                                }
+                              } catch (retellError) {
+                                log.error('Failed to create Retell chat for existing chat:', retellError.message);
+                                // Continue with update even if Retell creation fails
+                              }
+                            } else {
+                              // Chat has retell_chat_id, just update it
+                              await supa
+                                .from('whatsapp_chats')
+                                .update({ 
+                                  status: 'open',
+                                  last_message_at: new Date().toISOString(),
+                                  updated_at: new Date().toISOString(),
+                                  agent_variables: updatedAgentVariables
+                                })
+                                .eq('id', existingChat.id);
+                              
+                              // Update Retell chat with latest appointments if chat is ongoing
+                              try {
+                                const retellChatInfo = await retellGetChat(existingChat.retell_chat_id);
+                                
+                                if (retellChatInfo.chat_status === 'ongoing') {
+                                  // Convert agent_variables to string format for Retell
+                                  const retellDynamicVariables = {};
+                                  Object.keys(updatedAgentVariables).forEach(key => {
+                                    if (updatedAgentVariables[key] !== null && updatedAgentVariables[key] !== undefined) {
+                                      retellDynamicVariables[key] = String(updatedAgentVariables[key]);
+                                    }
+                                  });
+
+                                  await retellUpdateChat(existingChat.retell_chat_id, {
+                                    override_dynamic_variables: retellDynamicVariables
+                                  });
+
+                                  log.info('Updated Retell chat with latest appointments on message:', {
+                                    retellChatId: existingChat.retell_chat_id,
+                                    leadId: lead?.id,
+                                    appointmentsCount: appointmentsDataForUpdate.appointments_count
+                                  });
+                                }
+                              } catch (retellError) {
+                                log.warn('Failed to update Retell chat with latest appointments:', retellError.message);
+                                // Don't fail if Retell update fails
+                              }
+                            }
                           }
 
                         } else {
@@ -1486,15 +1710,17 @@ router.post('/webhook', async (req, res) => {
                             } else if (waPhone) {
                               // Query for existing chat to get slot information and check if it's a followup
                               // Prioritize closed/ended chats to detect followup conversations
+                              const waPhoneWithoutPlus = waPhone.replace(/^\+/, ''); // Also check without + for backward compatibility
                               const { data: chatData } = await supa
                                 .from('whatsapp_chats')
                                 .select('id, agent_variables, metadata, retell_chat_analysis, status')
-                                .eq('wa_phone', waPhone)
+                                .or(`wa_phone.eq.${waPhone},wa_phone.eq.${waPhoneWithoutPlus}`)
                                 .in('status', ['closed', 'ended', 'completed'])
                                 .order('updated_at', { ascending: false })
                                 .limit(1)
                                 .maybeSingle();
                               chatWithSlots = chatData;
+                              // Get the original chat_type from the ended chat (preserved in metadata)
                               previousChatType = chatData?.metadata?.chat_type;
                               previousChatId = chatData?.id;
                             }
@@ -1511,10 +1737,13 @@ router.post('/webhook', async (req, res) => {
                               if (chatVars.suggested_date) slotVariables.suggested_date = String(chatVars.suggested_date);
                             }
 
-                            // Determine chat_type: if previous chat was marked as 'followup', use 'followup'
+                            // Determine chat_type: if there's a previous ended/closed chat, use 'followup'
                             // Otherwise, use 'welcome' for leads or 'other' for new conversations
                             let determinedChatType = 'other';
-                            if (previousChatType === 'followup') {
+                            if (previousChatId) {
+                              // If there's a previous chat (ended or closed), this is a followup
+                              // The previousChatType contains the original chat_type (e.g., 'confirm_appointment')
+                              // which helps maintain context for the conversation flow
                               determinedChatType = 'followup';
                             } else if (lead) {
                               determinedChatType = 'welcome';
@@ -1556,8 +1785,9 @@ router.post('/webhook', async (req, res) => {
                               }
                             }
 
-                            // Get all appointments for this lead
-                            const appointmentsDataForRetell = lead?.id ? await getAllAppointmentsForLead(lead.id) : { all_appointments: '', appointments_count: 0 };
+                            // Get all appointments for this phone number (aggregates across all leads with same phone)
+                            const patientPhoneForRetell = lead?.whatsapp || lead?.phone || phoneNumber;
+                            const appointmentsDataForRetell = patientPhoneForRetell ? await getAllAppointmentsForPhone(patientPhoneForRetell) : { all_appointments: '', appointments_count: 0 };
 
                             const chatVariables = {
                               ...(lead?.agent_variables || {}),
@@ -1597,18 +1827,20 @@ router.post('/webhook', async (req, res) => {
 
                           const chatLeadId = lead?.id || null;
                           
-                          // Get all appointments for this lead
-                          const appointmentsDataForNewChat = chatLeadId ? await getAllAppointmentsForLead(chatLeadId) : { all_appointments: '', appointments_count: 0 };
+                          // Get all appointments for this phone number (aggregates across all leads with same phone)
+                          const patientPhoneForNewChat = lead?.whatsapp || lead?.phone || phoneNumber;
+                          const appointmentsDataForNewChat = patientPhoneForNewChat ? await getAllAppointmentsForPhone(patientPhoneForNewChat) : { all_appointments: '', appointments_count: 0 };
                           
                           // #region agent log
                           fetch('http://localhost:7243/ingest/fa704248-e3dd-4b0a-ab9f-643803e5688c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'whatsapp.js:1013',message:'Creating new chat record',data:{ownerId,leadId:chatLeadId,waPhone,hasLead:!!lead,phoneNumber},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
                           // #endregion
                           
-                          // Check for existing active chat for this phone number
+                          // Check for existing active chat for this phone number (check both formats)
+                          const waPhoneWithoutPlus = waPhone.replace(/^\+/, ''); // Also check without + for backward compatibility
                           const { data: existingChat } = await supa
                             .from('whatsapp_chats')
                             .select('id, retell_chat_id')
-                            .eq('wa_phone', waPhone)
+                            .or(`wa_phone.eq.${waPhone},wa_phone.eq.${waPhoneWithoutPlus}`)
                             .in('status', ['open', 'pending_response'])
                             .maybeSingle();
 
@@ -1817,6 +2049,84 @@ router.post('/webhook', async (req, res) => {
                                 if (chatVars.available_slots) slotVariables.available_slots = String(chatVars.available_slots);
                                 if (chatVars.suggested_date) slotVariables.suggested_date = String(chatVars.suggested_date);
                               }
+
+                              // Determine chat_type: check if this is a followup conversation
+                              // The chat might have ended but the database status might not be updated yet
+                              // So we check: 1) chat status, 2) metadata.is_followup, 3) original chat_type, 4) other ended chats
+                              let determinedChatType = 'other';
+                              let previousChatHistory = '';
+                              let previousChatId = null;
+
+                              // Check if current chat is ended/closed (indicates it was a previous conversation)
+                              if (chat?.status && ['closed', 'ended', 'completed'].includes(chat.status)) {
+                                determinedChatType = 'followup';
+                                previousChatId = chat.id;
+                              } else if (chat?.metadata?.chat_type === 'followup') {
+                                // Chat is already marked as followup, so we're continuing a followup conversation
+                                // Use the previous_chat_id if available, otherwise use the current chat as the previous one
+                                determinedChatType = 'followup';
+                                previousChatId = chat.metadata?.previous_chat_id || chat.metadata?.previous_retell_chat_id || chat.id;
+                              } else if (chat?.metadata?.is_followup) {
+                                // Chat is marked as followup (set when previous chat ended)
+                                determinedChatType = 'followup';
+                                previousChatId = chat.metadata?.previous_chat_id || chat.id;
+                              } else if (chat?.metadata?.chat_type && chat.metadata.chat_type !== 'other') {
+                                // If chat has a specific chat_type (like 'confirm_appointment', 'welcome'), 
+                                // and we're getting an error, it means the Retell chat ended but DB wasn't updated yet
+                                // This is a followup to that conversation
+                                determinedChatType = 'followup';
+                                previousChatId = chat.id;
+                              } else if (waPhone) {
+                                // Check for other ended chats for this phone number
+                                const waPhoneWithoutPlus = waPhone.replace(/^\+/, ''); // Also check without + for backward compatibility
+                                const { data: previousEndedChat } = await supa
+                                  .from('whatsapp_chats')
+                                  .select('id, metadata, retell_chat_analysis')
+                                  .or(`wa_phone.eq.${waPhone},wa_phone.eq.${waPhoneWithoutPlus}`)
+                                  .in('status', ['closed', 'ended', 'completed'])
+                                  .neq('id', chat.id) // Exclude current chat
+                                  .order('updated_at', { ascending: false })
+                                  .limit(1)
+                                  .maybeSingle();
+
+                                if (previousEndedChat) {
+                                  determinedChatType = 'followup';
+                                  previousChatId = previousEndedChat.id;
+                                }
+                              }
+
+                              // Get previous chat history if it's a followup
+                              if (determinedChatType === 'followup' && previousChatId) {
+                                try {
+                                  const { data: previousChat } = await supa
+                                    .from('whatsapp_chats')
+                                    .select('retell_chat_analysis')
+                                    .eq('id', previousChatId)
+                                    .single();
+                                  
+                                  if (previousChat?.retell_chat_analysis?.chat_summary) {
+                                    previousChatHistory = `Resumo da conversa anterior: ${previousChat.retell_chat_analysis.chat_summary}`;
+                                  } else {
+                                    // Fallback: Get messages from whatsapp_messages table
+                                    const { data: previousMessages } = await supa
+                                      .from('whatsapp_messages')
+                                      .select('body, sender, direction, created_at')
+                                      .eq('chat_id', previousChatId)
+                                      .order('created_at', { ascending: true })
+                                      .limit(20);
+                                    
+                                    if (previousMessages && previousMessages.length > 0) {
+                                      const formattedMessages = previousMessages.map(msg => {
+                                        const senderLabel = msg.sender === 'user' ? 'Cliente' : 'Assistente';
+                                        return `${senderLabel}: ${msg.body}`;
+                                      }).join('\n');
+                                      previousChatHistory = `Histórico da conversa anterior:\n${formattedMessages}`;
+                                    }
+                                  }
+                                } catch (historyError) {
+                                  log.warn('Error retrieving previous chat history in error recovery:', historyError);
+                                }
+                              }
                               
                               if (Object.keys(slotVariables).length > 0) {
                                 log.info('Including available slots in Retell chat (error recovery):', {
@@ -1826,14 +2136,21 @@ router.post('/webhook', async (req, res) => {
                                 });
                               }
 
+                              // Get all appointments for this phone number (aggregates across all leads with same phone)
+                              const patientPhoneForErrorRecovery = lead?.whatsapp || lead?.phone || phoneNumber;
+                              const appointmentsDataForErrorRecovery = patientPhoneForErrorRecovery ? await getAllAppointmentsForPhone(patientPhoneForErrorRecovery) : { all_appointments: '', appointments_count: 0 };
+
                               const chatVariables = {
                                 ...(lead?.agent_variables || {}),
                                 ...slotVariables, // Include available slots from WhatsApp chat
-                                chat_type: 'other',
+                                chat_type: determinedChatType,
                                 name: String(lead?.name || 'Cliente'),
                                 lead_id: String(lead?.id || ''),
                                 business_name: ownerData?.name || '',
-                                location: ownerData?.location || ''
+                                location: ownerData?.location || '',
+                                all_appointments: appointmentsDataForErrorRecovery.all_appointments,
+                                appointments_count: appointmentsDataForErrorRecovery.appointments_count || 0,
+                                ...(previousChatHistory ? { previous_chat_history: previousChatHistory } : {})
                               };
 
                               Object.keys(chatVariables).forEach(key => {
@@ -1848,22 +2165,62 @@ router.post('/webhook', async (req, res) => {
                                 metadata: {
                                   lead_id: lead?.id || null,
                                   owner_id: ownerId,
-                                  chat_type: 'other',
-                                  wa_phone: waPhone
+                                  chat_type: determinedChatType,
+                                  wa_phone: waPhone,
+                                  ...(previousChatId ? { previous_chat_id: previousChatId } : {})
                                 }
                               });
 
                               const newRetellChatId = newRetellChat.chat_id;
                               log.info('Created new Retell chat after error:', { chatId: newRetellChatId, waPhone });
 
+                              // Merge agent_variables for database update
+                              const finalAgentVariables = {
+                                ...(chat.agent_variables || {}),
+                                ...chatVariables
+                              };
+
                               await supa
                                 .from('whatsapp_chats')
                                 .update({
                                   retell_chat_id: newRetellChatId,
                                   status: 'open',
+                                  agent_variables: finalAgentVariables,
+                                  metadata: {
+                                    ...(chat.metadata || {}),
+                                    chat_type: determinedChatType,
+                                    ...(previousChatId ? { previous_chat_id: previousChatId } : {})
+                                  },
                                   updated_at: new Date().toISOString()
                                 })
                                 .eq('id', chat.id);
+
+                              // Update Retell chat with final agent_variables to ensure consistency
+                              try {
+                                const retellChatInfo = await retellGetChat(newRetellChatId);
+                                
+                                if (retellChatInfo.chat_status === 'ongoing') {
+                                  // Convert agent_variables to string format for Retell
+                                  const retellDynamicVariables = {};
+                                  Object.keys(finalAgentVariables).forEach(key => {
+                                    if (finalAgentVariables[key] !== null && finalAgentVariables[key] !== undefined) {
+                                      retellDynamicVariables[key] = String(finalAgentVariables[key]);
+                                    }
+                                  });
+
+                                  await retellUpdateChat(newRetellChatId, {
+                                    override_dynamic_variables: retellDynamicVariables
+                                  });
+
+                                  log.info('Updated Retell chat with final agent_variables in error recovery:', {
+                                    retellChatId: newRetellChatId,
+                                    leadId: lead?.id
+                                  });
+                                }
+                              } catch (retellUpdateError) {
+                                log.warn('Failed to update Retell chat with final agent_variables in error recovery:', retellUpdateError.message);
+                                // Don't fail if Retell update fails - continue with message sending
+                              }
 
                               const retryCompletion = await retellSendChatMessage(newRetellChatId, messageText);
                               const retryMessages = retryCompletion.messages || [];

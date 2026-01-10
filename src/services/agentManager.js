@@ -460,7 +460,7 @@ class AgentManager {
         if (!ownerDataError && ownerData?.agents) {
           // In test mode, accept inactive agents; otherwise only active
           if (testMode || ownerData.agents.is_active) {
-            selectedAgent = ownerData.agents;
+          selectedAgent = ownerData.agents;
           }
         }
         

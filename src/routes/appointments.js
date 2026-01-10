@@ -3,6 +3,7 @@ import { supa } from '../lib/supabase.js';
 import { log } from '../config/logger.js';
 import { verifyJWT } from '../middleware/verifyJWT.js';
 import { googleCalendarService } from '../services/googleCalendar.js';
+import { updateAgentVariablesForLead } from './retell.js';
 
 const router = Router();
 
@@ -66,7 +67,7 @@ router.get('/', verifyJWT, async (req, res) => {
     if (resourceIds.treatment.size > 0) {
       const { data: treatments } = await supa
         .from('treatments')
-        .select('id, treatment_name as name')
+        .select('id, treatment_name as name, main_category, subcategory')
         .in('id', Array.from(resourceIds.treatment))
         .eq('owner_id', userId);
 
@@ -88,6 +89,7 @@ router.get('/', verifyJWT, async (req, res) => {
       } else if (appointment.resource_type === 'treatment' && appointment.resource_id) {
         const treatment = treatmentsMap.get(appointment.resource_id);
         resourceName = treatment?.name || 'Unknown Treatment';
+        resourceSpecialty = treatment?.subcategory || treatment?.main_category || '';
       }
 
       return {
@@ -157,7 +159,11 @@ router.post('/', verifyJWT, async (req, res) => {
       });
     }
 
-    // Verify doctor belongs to this user
+    // Check if it's a doctor or treatment
+    let resourceType = 'doctor';
+    let resource = null;
+    
+    // First, try to find as a doctor
     const { data: doctor, error: doctorError } = await supa
       .from('doctors')
       .select('id, name, google_calendar_id, google_refresh_token')
@@ -165,11 +171,27 @@ router.post('/', verifyJWT, async (req, res) => {
       .eq('owner_id', userId)
       .single();
 
-    if (doctorError || !doctor) {
-      return res.status(404).json({
-        ok: false,
-        error: 'Doctor not found or does not belong to you'
-      });
+    if (doctor && !doctorError) {
+      resource = doctor;
+      resourceType = 'doctor';
+    } else {
+      // If not found as doctor, try as treatment
+      const { data: treatment, error: treatmentError } = await supa
+        .from('treatments')
+        .select('id, treatment_name as name, google_calendar_id, google_refresh_token')
+        .eq('id', doctor_id)
+        .eq('owner_id', userId)
+        .single();
+
+      if (treatment && !treatmentError) {
+        resource = treatment;
+        resourceType = 'treatment';
+      } else {
+        return res.status(404).json({
+          ok: false,
+          error: 'Doctor or treatment not found or does not belong to you'
+        });
+      }
     }
 
     // Validate appointment time is in the future
@@ -182,8 +204,8 @@ router.post('/', verifyJWT, async (req, res) => {
       });
     }
 
-    // Check availability if Google Calendar is connected
-    if (doctor.google_calendar_id && doctor.google_refresh_token) {
+    // Check availability if Google Calendar is connected (only for doctors)
+    if (resourceType === 'doctor' && resource.google_calendar_id && resource.google_refresh_token) {
       try {
         const endTime = new Date(end_time);
         const availability = await googleCalendarService.getAvailableSlots(
@@ -299,7 +321,7 @@ router.post('/', verifyJWT, async (req, res) => {
       .insert({
         owner_id: userId,
         lead_id: finalLeadId,
-        resource_type: 'doctor',
+        resource_type: resourceType,
         resource_id: doctor_id,
         appointment_type,
         start_at: start_time,
@@ -319,11 +341,11 @@ router.post('/', verifyJWT, async (req, res) => {
       throw new Error(appointmentError.message);
     }
 
-    // Create Google Calendar event if doctor has calendar connected
+    // Create Google Calendar event if resource has calendar connected
     let googleEventId = null;
     let googleEventLink = null;
     
-    if (doctor.google_calendar_id && doctor.google_refresh_token) {
+    if (resource.google_calendar_id && resource.google_refresh_token) {
       try {
         const appointmentData = {
           summary: title || `${appointment_type} - ${patient_name}`,
@@ -346,7 +368,14 @@ router.post('/', verifyJWT, async (req, res) => {
           } : undefined
         };
 
-        const googleEvent = await googleCalendarService.createAppointment(doctor_id, appointmentData);
+        // Use appropriate method based on resource type
+        let googleEvent;
+        if (resourceType === 'treatment') {
+          googleEvent = await googleCalendarService.createTreatmentAppointment(userId, appointmentData);
+        } else {
+          googleEvent = await googleCalendarService.createAppointment(doctor_id, appointmentData);
+        }
+        
         googleEventId = googleEvent.id;
         googleEventLink = googleEvent.htmlLink;
 
@@ -363,7 +392,15 @@ router.post('/', verifyJWT, async (req, res) => {
       }
     }
 
-    log.info(`Appointment created: ${appointment.id} for doctor ${doctor_id}`);
+    log.info(`Appointment created: ${appointment.id} for ${resourceType} ${doctor_id}`);
+
+    // Update agent_variables in active whatsapp_chats and Retell chats
+    if (appointment.lead_id) {
+      // Add a small delay to ensure database consistency
+      await new Promise(resolve => setTimeout(resolve, 100));
+      updateAgentVariablesForLead(appointment.lead_id, 'appointment-create')
+        .catch(err => log.warn('Failed to update agent_variables after appointment creation:', err.message));
+    }
     
     res.status(201).json({
       ok: true,
@@ -437,6 +474,12 @@ router.put('/:id', verifyJWT, async (req, res) => {
     }
 
     log.info(`Appointment updated: ${appointmentId}`);
+
+    // Update agent_variables in active whatsapp_chats and Retell chats
+    if (updatedAppointment.lead_id) {
+      updateAgentVariablesForLead(updatedAppointment.lead_id, 'appointment-update')
+        .catch(err => log.warn('Failed to update agent_variables after appointment update:', err.message));
+    }
     
     res.json({
       ok: true,
@@ -488,6 +531,12 @@ router.delete('/:id', verifyJWT, async (req, res) => {
     }
 
     log.info(`Appointment deleted: ${appointmentId}`);
+
+    // Update agent_variables in active whatsapp_chats and Retell chats
+    if (appointment.lead_id) {
+      updateAgentVariablesForLead(appointment.lead_id, 'appointment-delete')
+        .catch(err => log.warn('Failed to update agent_variables after appointment delete:', err.message));
+    }
     
     res.json({
       ok: true,
@@ -568,7 +617,7 @@ router.get('/patients', verifyJWT, async (req, res) => {
     if (resourceIds.treatment.size > 0) {
       const { data: treatments } = await supa
         .from('treatments')
-        .select('id, treatment_name as name')
+        .select('id, treatment_name as name, main_category, subcategory')
         .in('id', Array.from(resourceIds.treatment))
         .eq('owner_id', userId);
 
@@ -618,6 +667,7 @@ router.get('/patients', verifyJWT, async (req, res) => {
       } else if (appointment.resource_type === 'treatment' && appointment.resource_id) {
         const treatment = treatmentsMap.get(appointment.resource_id);
         resourceName = treatment?.name;
+        resourceSpecialty = treatment?.subcategory || treatment?.main_category || '';
       }
       
       const appointmentData = {
@@ -736,7 +786,7 @@ router.get('/clients', verifyJWT, async (req, res) => {
     if (resourceIds.treatment.size > 0) {
       const { data: treatments } = await supa
         .from('treatments')
-        .select('id, treatment_name as name')
+        .select('id, treatment_name as name, main_category, subcategory')
         .in('id', Array.from(resourceIds.treatment))
         .eq('owner_id', userId);
 
@@ -786,6 +836,7 @@ router.get('/clients', verifyJWT, async (req, res) => {
       } else if (appointment.resource_type === 'treatment' && appointment.resource_id) {
         const treatment = treatmentsMap.get(appointment.resource_id);
         resourceName = treatment?.name;
+        resourceSpecialty = treatment?.subcategory || treatment?.main_category || '';
       }
       
       const appointmentData = {

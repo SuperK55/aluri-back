@@ -98,7 +98,6 @@ router.post('/lead/submit', verifyApiToken, async (req, res) => {
         notes,
         custom_fields,
         status: 'new',
-        test_mode: test_mode || false,
       })
       .select()
       .single();

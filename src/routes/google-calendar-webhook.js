@@ -4,6 +4,7 @@ import { supa } from '../lib/supabase.js';
 import { log } from '../config/logger.js';
 import { env } from '../config/env.js';
 import { googleCalendarService } from '../services/googleCalendar.js';
+import { updateAgentVariablesForLead } from './retell.js';
 
 const router = Router();
 
@@ -219,6 +220,12 @@ async function processCalendarNotification({ channelId, resourceId, resourceStat
         .eq('id', appointment.id);
 
       log.info(`✅ Appointment ${appointment.id} marked as cancelled due to Google Calendar deletion`);
+
+      // Update agent_variables in active whatsapp_chats and Retell chats
+      if (appointment.lead_id) {
+        updateAgentVariablesForLead(appointment.lead_id, 'google-calendar-cancel')
+          .catch(err => log.warn('Failed to update agent_variables after Google Calendar cancellation:', err.message));
+      }
     }
 
     // Check for updated appointments (time changed)
@@ -250,6 +257,12 @@ async function processCalendarNotification({ channelId, resourceId, resourceStat
           .eq('id', appointment.id);
 
         log.info(`✅ Appointment ${appointment.id} time updated from Google Calendar`);
+
+        // Update agent_variables in active whatsapp_chats and Retell chats
+        if (appointment.lead_id) {
+          updateAgentVariablesForLead(appointment.lead_id, 'google-calendar-update')
+            .catch(err => log.warn('Failed to update agent_variables after Google Calendar update:', err.message));
+        }
       }
     }
 

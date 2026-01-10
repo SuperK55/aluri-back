@@ -40,14 +40,47 @@ async function isLeadAlreadyBeingProcessed(leadId) {
 }
 
 /**
- * Get all scheduled appointments for a lead and format them for agent context
- * @param {string} leadId - The lead ID
+ * Get all appointments for a phone number (aggregates across all leads with that phone)
+ * @param {string} phoneNumber - The phone number (can be with or without +)
  * @returns {Object} - Formatted appointments data for agent_variables
  */
-async function getAllAppointmentsForLead(leadId) {
+async function getAllAppointmentsForPhone(phoneNumber) {
   try {
-    if (!leadId) return { all_appointments: '', appointments_list: [], appointments_count: 0 };
+    if (!phoneNumber) {
+      return { all_appointments: '', appointments_list: [], appointments_count: 0 };
+    }
 
+    // Normalize phone number (remove + and non-digits for comparison)
+    const normalizedPhone = phoneNumber.replace(/[^\d]/g, '');
+    
+    // Find all leads with this phone number
+    // Try multiple patterns to catch different phone formats
+    const phonePatterns = [
+      normalizedPhone,
+      `+${normalizedPhone}`,
+      `55${normalizedPhone}`,
+      `+55${normalizedPhone}`
+    ];
+    
+    // Build query to find leads matching any of these patterns
+    let leadsQuery = supa
+      .from('leads')
+      .select('id');
+    
+    // Use ilike for pattern matching (case-insensitive)
+    const conditions = phonePatterns.map(pattern => `phone.ilike.%${pattern}%`).join(',');
+    leadsQuery = leadsQuery.or(conditions);
+    
+    const { data: leads, error: leadsError } = await leadsQuery;
+
+    if (leadsError || !leads || leads.length === 0) {
+      log.debug('No leads found for phone number:', { phoneNumber, normalizedPhone });
+      return { all_appointments: '', appointments_list: [], appointments_count: 0 };
+    }
+
+    const leadIds = leads.map(lead => lead.id);
+
+    // Fetch all appointments for these leads
     const { data: appointments, error } = await supa
       .from('appointments')
       .select(`
@@ -56,16 +89,60 @@ async function getAllAppointmentsForLead(leadId) {
         end_at,
         resource_type,
         resource_id,
-        status,
-        doctors(id, name),
-        treatments(id, treatment_name)
+        status
       `)
-      .eq('lead_id', leadId)
+      .in('lead_id', leadIds)
       .eq('status', 'scheduled')
       .order('start_at', { ascending: true });
 
-    if (error || !appointments || appointments.length === 0) {
+    if (error) {
+      log.error('Error querying appointments by phone:', { error, phoneNumber, errorMessage: error.message });
       return { all_appointments: '', appointments_list: [], appointments_count: 0 };
+    }
+
+    if (!appointments || appointments.length === 0) {
+      log.debug('No appointments found for phone number:', { phoneNumber, leadIds });
+      return { all_appointments: '', appointments_list: [], appointments_count: 0 };
+    }
+
+    // Collect resource IDs by type
+    const resourceIds = {
+      doctor: new Set(),
+      treatment: new Set()
+    };
+
+    appointments.forEach(apt => {
+      if (apt.resource_type === 'doctor' && apt.resource_id) {
+        resourceIds.doctor.add(apt.resource_id);
+      } else if (apt.resource_type === 'treatment' && apt.resource_id) {
+        resourceIds.treatment.add(apt.resource_id);
+      }
+    });
+
+    // Fetch all doctors
+    const doctorsMap = new Map();
+    if (resourceIds.doctor.size > 0) {
+      const { data: doctors } = await supa
+        .from('doctors')
+        .select('id, name')
+        .in('id', Array.from(resourceIds.doctor));
+
+      doctors?.forEach(doctor => {
+        doctorsMap.set(doctor.id, doctor);
+      });
+    }
+
+    // Fetch all treatments
+    const treatmentsMap = new Map();
+    if (resourceIds.treatment.size > 0) {
+      const { data: treatments } = await supa
+        .from('treatments')
+        .select('id, treatment_name')
+        .in('id', Array.from(resourceIds.treatment));
+
+      treatments?.forEach(treatment => {
+        treatmentsMap.set(treatment.id, treatment);
+      });
     }
 
     // Format appointments for display
@@ -83,12 +160,14 @@ async function getAllAppointmentsForLead(leadId) {
       const minutes = String(startDate.getMinutes()).padStart(2, '0');
       const timeStr = `${hours}:${minutes}`;
       
-      // Get resource name
+      // Get resource name from maps
       let resourceName = 'Consulta';
-      if (apt.resource_type === 'doctor' && apt.doctors) {
-        resourceName = apt.doctors.name || 'Médico';
-      } else if (apt.resource_type === 'treatment' && apt.treatments) {
-        resourceName = apt.treatments.treatment_name || 'Tratamento';
+      if (apt.resource_type === 'doctor' && apt.resource_id) {
+        const doctor = doctorsMap.get(apt.resource_id);
+        resourceName = doctor?.name || 'Médico';
+      } else if (apt.resource_type === 'treatment' && apt.resource_id) {
+        const treatment = treatmentsMap.get(apt.resource_id);
+        resourceName = treatment?.treatment_name || 'Tratamento';
       }
 
       return {
@@ -103,9 +182,9 @@ async function getAllAppointmentsForLead(leadId) {
       };
     });
 
-    // Create a readable text list for the agent
+    // Create a readable text list for the agent (include appointment ID for reference)
     const appointmentsText = formattedAppointments
-      .map((apt, index) => `${index + 1}. ${apt.formatted}`)
+      .map((apt, index) => `${index + 1}. [ID: ${apt.id}] ${apt.formatted}`)
       .join('\n');
 
     return {
@@ -114,7 +193,7 @@ async function getAllAppointmentsForLead(leadId) {
       appointments_count: formattedAppointments.length
     };
   } catch (error) {
-    log.error('Error fetching appointments for lead:', error);
+    log.error('Error fetching appointments for phone:', error);
     return { all_appointments: '', appointments_list: [], appointments_count: 0 };
   }
 }
@@ -555,8 +634,8 @@ cron.schedule('5 * * * *', async () => {
           ]
         );
         
-        // Get all appointments for this lead
-        const appointmentsDataForWelcome = await getAllAppointmentsForLead(lead.id);
+        // Get all appointments for this phone number (aggregates across all leads with same phone)
+        const appointmentsDataForWelcome = await getAllAppointmentsForPhone(toPhone);
         
         // Create whatsapp_chats record
         const chatMetadata = {
@@ -636,20 +715,20 @@ cron.schedule('5 * * * *', async () => {
         } else {
           // Insert new chat record
           const { data: insertedChat, error: chatError } = await supa
-            .from('whatsapp_chats')
-            .insert({
-              owner_id: ownerId,
-              lead_id: lead.id,
-              wa_phone: normalizedPhone,
-              agent_id: chatAgent.id,
-              status: 'pending_response',
-              metadata: chatMetadata,
+          .from('whatsapp_chats')
+          .insert({
+            owner_id: ownerId,
+            lead_id: lead.id,
+            wa_phone: normalizedPhone,
+            agent_id: chatAgent.id,
+            status: 'pending_response',
+            metadata: chatMetadata,
               agent_variables: agentVariablesForWelcome,
-              last_message_at: new Date().toISOString()
-            })
-            .select()
-            .single();
-          
+            last_message_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+        
           if (!chatError && insertedChat) {
             newChat = insertedChat;
           }
@@ -864,8 +943,8 @@ cron.schedule('5 * * * *', async () => {
         // Format available slots for agent context
         const availableSlotsText = earlierSlots.map(s => s.formatted).join('\n');
         
-        // Get all appointments for this lead to help with rescheduling
-        const appointmentsData = await getAllAppointmentsForLead(lead.id);
+        // Get all appointments for this phone number (aggregates across all leads with same phone)
+        const appointmentsData = await getAllAppointmentsForPhone(toPhone);
         
         // Check for existing active chat for this phone number
         const { data: existingChat } = await supa
@@ -876,20 +955,20 @@ cron.schedule('5 * * * *', async () => {
           .maybeSingle();
 
         const agentVariablesForAvailableTime = {
-          ...agentVariables,
-          name: firstName,
-          client_name: lead.name,
-          resource_name: resourceName,
-          resource_type: resourceType,
-          business_name: ownerData?.name || 'Clínica',
-          agent_name: chatAgent.agent_name || 'Assistente',
-          suggested_date: formattedSuggestedDate,
-          available_slots: availableSlotsText,
-          slot_1: earlierSlots[0]?.formatted || '',
-          slot_1_date: earlierSlots[0]?.date || '',
-          slot_1_time: earlierSlots[0]?.time || '',
-          slot_2: earlierSlots[1]?.formatted || '',
-          slot_2_date: earlierSlots[1]?.date || '',
+                ...agentVariables,
+                name: firstName,
+                client_name: lead.name,
+                resource_name: resourceName,
+                resource_type: resourceType,
+                business_name: ownerData?.name || 'Clínica',
+                agent_name: chatAgent.agent_name || 'Assistente',
+                suggested_date: formattedSuggestedDate,
+                available_slots: availableSlotsText,
+                slot_1: earlierSlots[0]?.formatted || '',
+                slot_1_date: earlierSlots[0]?.date || '',
+                slot_1_time: earlierSlots[0]?.time || '',
+                slot_2: earlierSlots[1]?.formatted || '',
+                slot_2_date: earlierSlots[1]?.date || '',
           slot_2_time: earlierSlots[1]?.time || '',
           // Include all appointments for rescheduling context
           all_appointments: appointmentsData.all_appointments,
